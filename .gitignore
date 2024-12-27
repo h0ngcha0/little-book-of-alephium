@@ -1,0 +1,5 @@
+.vscode
+.venv
+test.py
+test.cfg
+my_book
