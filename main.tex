@@ -1,0 +1,31 @@
+% main.tex
+
+% Set the document language to English
+\usepackage[english]{babel}
+
+% Adjust page geometry
+\usepackage[a4paper, inner=1.5cm, outer=2.7cm, top=2cm, bottom=2cm, bindingoffset=0.5cm]{geometry}
+
+% Configure headers and footers using scrlayer-scrpage
+\usepackage[automark,headsepline,footsepline]{scrlayer-scrpage}
+\clearpairofpagestyles
+\ohead{\headmark}
+\ofoot{\pagemark}
+\pagestyle{scrheadings}
+
+\usepackage{titling}
+  \pretitle{\begin{center}\vspace*{3cm}\Huge\bfseries}
+  \posttitle{\end{center}\vspace{0.5em}}
+  \preauthor{\begin{center}\vspace*{0.5cm}\LARGE}
+  \postauthor{\end{center}\vspace{3cm}}
+% Include additional settings from external files
+\input{inline_code.tex}
+\input{bullet_styling.tex}
+\input{chapter_breaks.tex}
+\input{blockquote.tex}
+\input{hyperref_setup.tex}
+
+% Font settings using fontspec
+% \usepackage{fontspec}
+% \setmainfont{DejaVu Serif} % Set your main font
+% \setmonofont{SauceCodePro Nerd Font} % Set your monospace (code) font
