@@ -422,3 +422,267 @@ The `prefix` function is a helper function that extracts the address type from a
 
 With the Danube upgrade, Alephium will introduce groupless addresses known as `P2PK`. This enhancement enables wallets and dApps to abstract away the complexity of the group concept, offering a smoother and more user-friendly experience.
 
+#### Composite Types
+
+Ralph supports five composite types: `Tuple`, `Struct`, `Array`, `Enum`, and `Map`.
+
+##### Tuple
+
+Ralph supports `tuple`, a product type containing an ordered, fixed-size collection of values of potentially different types. Elements are accessed by their position in the tuple.
+
+```rust
+Contract TupleExample() {
+    pub fn test() -> () {
+        // A tuple with different types
+        let (mut first, second, third) = createTuple()
+        first = first + 1
+
+        assert!(first == 101, 0)
+        assert!(second == b`tuple example`, 1)
+        assert!(third == false, 2)
+        emit Debug(`Tuple test successful`)
+    }
+
+    fn createTuple() -> (U256, ByteVec, Bool, Address) {
+        return 100, b`tuple example`, false
+    }
+}
+```
+
+In the example above, `createTuple()` returns a tuple with three elements, which are destructured into `first`, `second`, and `third` in the `test()` function. The `first` element is explicitly declared as mutable with `mut` keyword, allowing us to modify its value. Other elements are immutable by default.
+
+##### Struct
+
+Ralph supports `struct`, a product type defined globally with fields that can be mutable or immutable. Unlike tuples where elements are accessed by position, struct elements are referred to by their field names using dot notation (e.g. `myStruct.fieldName`). To modify a nested field (e.g. `foo.x.y.z = 123`), all selectors in the chain (`foo`, `x`, `y`, and `z`) must be declared as mutable.
+
+```rust
+// Structs have to be defined globally
+struct Foo { x: U256, mut y: U256 }
+struct Bar { z: U256, mut foo: Foo }
+
+Contract Struct() {
+   pub fn test() -> () {
+       let f0 = Foo { x: 1, y: 2 }
+       // f0.y = 3 won't work as f0 is immutable despite the field y being mutable
+
+       let mut f1 = Foo { x: 1, y: 2 }
+       f1.y = 3 // This works as both f1 and y are mutable
+       assert!(f1.y == 3, 0)
+
+       // let b0 = Bar { z: 4, foo: f0 }
+       // b0.foo.y = 5 won't work as b0 is immutable
+
+       let mut b1 = Bar { z: 5, foo: f0 }
+       b1.foo.y = 6
+       assert!(b1.foo.y == 6, 1)
+
+       emit Debug(`Test successful for Struct`)
+  }
+}
+```
+
+Structs are value types that are copied when assigned to new variables, rather than being passed by reference:
+
+```rust
+struct Foo { x: U256, mut y: U256 }
+
+Contract Struct() {
+    pub fn test() -> () {
+        let foo0 = Foo { x: 0, y: 1 }
+        let mut foo1 = foo0
+
+        // Modifying foo1.y will not change foo0.y
+        foo1.y = 2
+        assert!(foo0.y == 1, 0)
+        assert!(foo1.y == 2, 1)
+
+        emit Debug(`Test successful for Struct`)
+    }
+}
+```
+
+Ralph also supports struct destructuring with syntax similar to TypeScript:
+
+```rust
+struct Foo { x: U256, y: U256 }
+
+Contract Struct() {
+  pub fn test() -> () {
+    let foo = Foo { x: 0, y: 1 }
+
+    let Foo { mut x, y } = foo
+    assert!(x == 0, 0)
+    assert!(y == 1, 1)
+    x = 1
+
+    // Variables `x` and `y` already exist, create two new variables `x1` and `y1`
+    let Foo { x: x1, y: y1 } = foo
+    assert!(x1 == 0, 2)
+    assert!(y1 == 1, 3)
+
+    emit Debug(`Test successful for Struct`)
+  }
+}
+```
+
+##### Fixed Size Array
+
+Fixed size arrays are product types, similar to tuples and structs, but with a key difference: they contain elements of the same type, and the size is part of the type signature. This means the array's length must be known at compile time and cannot be changed during execution.
+
+```rust
+struct Foo { x: U256, y: U256 }
+
+Contract Array() {
+    pub fn test() -> () {
+
+        let a0 = [0, 1, 2, 3]  // [U256; 4]
+        assert!(a0[2] == 2, 0)
+
+        let a1 = [[0, 1], [2, 3]] // [[U256, 2]; 2]
+        assert!(a1[0][1] == 1, 1)
+
+        let a2 = [0i; 3]  // [I256; 3]
+        assert!(a2[2] == 0i, 2)
+
+        let a3 = [#00, #11, #22, #33]  // [ByteVec; 4]
+        assert!(a3[2] == #22, 3)
+
+        let a4 = [Foo{ x: 1, y: 2 }, Foo{ x: 3, y: 4 }] // [Foo; 2]
+        assert!(a4[0].x == 1, 4)
+        assert!(a4[1].y == 4, 5)
+
+        emit Debug(`Test successful for Array`)
+  }
+}
+```
+
+Fixed size arrays can be initialized in two ways: by providing a list of elements within square brackets, like `[0, 1, 2, 3]` as shown in `a0`, or by specifying a single element followed by a semicolon and the size of the array, like `[0i; 3]` as shown in `a2`. This second syntax creates an array with all elements initialized to the same value.
+
+The elements of a fixed size array can be either primitive types (e.g. `U256`, `I256`, `ByteVec`) or composite types such as `Tuple`, `Struct`. It can also be other fixed sized arrays which would make it multi-dimensional arrays.
+
+##### Map
+
+In Ralph, `Map` is a key-value data structure defined as global contract attributes, eliminating the need for explicit initialization. Maps are declared using the syntax `mapping[KeyType, ValueType] mapName` where:
+
+- `KeyType` can be any primitive type (`Bool`, `U256`, `I256`, `Address`, `ByteVec`)
+- `ValueType` can be any valid Ralph type except another `Map`
+
+Maps provide efficient storage and retrieval of values based on unique keys, making them ideal for maintaining state in smart contracts.
+
+Under the hood, each Map entry is constructed as a subcontract of the current contract. Unlike other blockchain implementations where maps can cause state bloat with unlimited entries, Alephium's approach prevents this by requiring a small deposit for each map entry. While the deposit amount could potentially be updated in the future upgrades, using the `mapEntryDeposit!()` built-in function in Ralph ensures your code remains future-proof by always returning the correct required amount. The deposit is automatically returned to a specified recipient when the map entry is removed.
+
+Maps provide three essential built-in methods: `insert!` for creating entries, `remove!` for deleting entries, and `contains!` for checking existence. Values can be accessed and updated using bracket syntax `map[key] = newValue`. The example below demonstrates these operations.
+
+```rust
+Contract Counters() {
+  // All maps must be defined at the contract level
+  mapping[Address, U256] counters
+
+  @using(preapprovedAssets = true, checkExternalCaller = false)
+  pub fn create() -> () {
+    let key = callerAddress!()
+    let depositor = key
+    // The depositor will deposit a minimal ALPH deposit for the new map entry
+    counters.insert!(depositor, key, 1)
+  }
+
+  @using(checkExternalCaller = false)
+  pub fn increase() -> () {
+    let key = callerAddress!()
+    let value = counters[key]
+    // Update the map entry value
+    counters[key] = value + 1
+  }
+
+  @using(checkExternalCaller = false)
+  pub fn currentCount(key: Address) -> U256 {
+    if (counters.contains!(key)) {
+      return counters[key]
+    } else {
+      return 0
+    }
+  }
+
+  @using(checkExternalCaller = false)
+  pub fn clear() -> U256 {
+    let key = callerAddress!()
+    let depositRecipient = key
+    let value = counters[key]
+    // Each map entry removal redeems the map entry deposit
+    counters.remove!(depositRecipient, key)
+    return value
+  }
+}
+```
+
+
+The `Counters` contract demonstrates maps in Ralph by implementing a simple personal counter. Users can create a counter tied to their address (with a map entry deposit), increment it, check its value, and eventually clear it (recovering their deposit).
+
+Function annotations play a crucial role in Ralph smart contracts, and we'll explore them in more details in the next section. For now, let's briefly examine the annotations used in the `Counters` contract to understand their purpose:
+
+- `@using(preapprovedAssets = true)`: This annotation requires the caller to approve assets before calling the function. In this case, the caller needs to approve enough ALPH to cover the map entry deposit.
+- `@using(checkExternalCaller = false)`: By default, Ralph requires public functions to check the caller, otherwise it won't compile. This annotation allows any caller to call the function.
+
+Let's test the `Counters` contract using the TypeScript code below:
+
+```typescript
+import { MAP_ENTRY_DEPOSIT, web3 } from '@alephium/web3'
+import { getSigner } from '@alephium/web3-test'
+import { Counters } from '../artifacts/ts'
+
+async function test() {
+  web3.setCurrentNodeProvider('http://127.0.0.1:22973', undefined, fetch)
+
+  const signer = await getSigner()
+  const { contractInstance: counters } = await Counters.deploy(
+    signer, { initialFields: {} }
+  )
+
+  async function getCurrentCount() {
+    const { returns } = await counters.view.currentCount(
+      { args: { key: signer.address } }
+    )
+    return returns
+  }
+
+  console.assert(await getCurrentCount() === 0n);
+  await counters.transact.create({ signer, attoAlphAmount: MAP_ENTRY_DEPOSIT })
+  console.assert(await getCurrentCount() === 1n)
+  await counters.transact.increase({ signer })
+  console.assert(await getCurrentCount() === 2n)
+  await counters.transact.clear({ signer })
+  console.assert(await getCurrentCount() === 0n);
+}
+
+test()
+```
+
+`getCurrentCount` is a helper function that calls the `currentCount` view function of the `Counters` contract to get the current count of the counter for the signer's address. After deploying the `Counters` contract, the current count for signer address is 0.
+
+After calling the `create` function, the counter for the signer's address is initialized to 1. We use the `transact` method since this function modifies blockchain state, and we provide the required `MAP_ENTRY_DEPOSIT` amount of ALPH to cover the map entry cost.
+
+Next, we call the `increase` function to increment the counter to 2. Finally, we call the `clear` function which resets the counter to 0 and returns the map entry deposit to the signer's address.
+
+##### Enum
+
+Ralph supports `enum` types, which let you define a type with several possible variants. Enums can be defined either globally (outside any contract) for use across multiple contracts, or locally within a specific contract. They're especially useful for representing a fixed set of related values, such as error codes or status indicators.
+
+```rust
+enum GlobalErrorCode {
+  INVALID_CALLER_CONTRACT = 0
+}
+
+Contract Foo(owner: Address, parentId: ByteVec) {
+  enum LocalErrorCode {
+    INVALID_OWNER = 1
+  }
+
+  pub fn foo(caller: Address) -> () {
+    assert!(callerContractId!() == parentId, GlobalErrorCode.INVALID_CALLER_CONTRACT)
+    assert!(caller == owner, LocalErrorCode.INVALID_OWNER)
+  }
+}
+```
+
+The value for enum fields can only be constant value of primitive types such as `U256`, `I256`, `Bool`, `Address` and `ByteVec`.
+
