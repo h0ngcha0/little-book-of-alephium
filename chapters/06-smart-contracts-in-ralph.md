@@ -686,3 +686,340 @@ Contract Foo(owner: Address, parentId: ByteVec) {
 
 The value for enum fields can only be constant value of primitive types such as `U256`, `I256`, `Bool`, `Address` and `ByteVec`.
 
+### Functions
+
+Functions are the executable units of code in Ralph and can be defined within either a contract or a transaction script.
+
+#### Function Signature
+
+```rust
+// Public function, which can be called by anyone
+pub fn foo() -> ()
+
+// Private function, which can only be called inside the contract
+fn foo() -> ()
+
+// Function takes 1 parameter and has no return values
+fn foo(a: U256) -> ()
+
+// Function takes 2 parameters and returns 1 value
+fn foo(a: U256, b: Boolean) -> U256
+
+// Function takes 2 parameters and returns multiple values
+fn foo(a: U256, b: Boolean) -> (U256, ByteVec, Address)
+
+// Function takes a struct as parameter and returns another struct
+fn foo(foo: Foo) -> Bar
+```
+
+Functions in Ralph are defined with an optional visibility modifier (`pub` for public or no modifier for private), followed by the `fn` keyword, the function name, parameters in parentheses, a return type after an arrow (`->`), and the function body enclosed in curly braces. Public functions can be called from outside the contract, while private functions are only accessible within the contract. Functions can accept multiple parameters and return multiple values, supporting both primitive and composite types.
+
+
+#### Function Annotations
+
+Ralph functions support annotations to specify behavior and permissions. Currently, the following annotations are supported:
+
+| Annotation Field       | Description                                                 | Default Value |
+|------------------------|-------------------------------------------------------------|---------------|
+| `preapprovedAssets`    | Whether the function uses user-approved assets              | `false`       |
+| `assetsInContract`     | Whether the function uses contract assets                   | `false`       |
+| `payToContractOnly`    | Whether the function only receives assets into the contract | `false`       |
+| `checkExternalCaller`  | Whether the function is required to check the caller        | `true`        |
+| `updateFields`         | Whether the function updates the contract fields            | `false`       |
+
+We will discuss each of these annotations in detail in the rest of this section, including how they affect function behavior and when they should be used.
+
+##### Using Approved Assets
+
+In Ralph, functions that use assets require explicit approval from the caller. This is a security feature that ensures assets are only spent with proper authorization. When a function needs to use approved assets:
+
+1. The function must be annotated with `@using(preapprovedAssets = true)`
+2. All functions in the call stack that pass these assets must also have this annotation
+3. The caller must explicitly specify which assets and amounts are being approved
+
+This creates a clear chain of asset approval throughout the entire call stack.
+
+```rust
+Contract Burn() {
+  // Requires asset approval to call `burn` since it burns assets
+  @using(preapprovedAssets = true)
+  fn burn(caller: Address, tokenId: ByteVec) -> () {
+    burnToken!(caller, tokenId, 1)
+  }
+
+  @using(preapprovedAssets = true, checkExternalCaller = false)
+  pub fn main(tokenId: ByteVec) -> () {
+    let caller = callerAddress!()
+    // Approves 1 token from caller to call `burn`
+    burn{caller -> tokenId: 1}(caller, tokenId)
+  }
+}
+```
+
+In the example above, the `burn` function requires asset approval from the caller before it can be called because it uses the `burnToken!` built-in function to burn 1 token. The `main` function explicitly approves exactly 1 token from the caller for the `burn` function using the braces syntax.
+
+We can test the `Burn` contract using the TypeScript code below:
+
+```typescript
+import { web3 } from '@alephium/web3'
+import { getSigner, mintToken } from '@alephium/web3-test'
+import { Burn } from '../artifacts/ts'
+
+async function test() {
+  web3.setCurrentNodeProvider('http://127.0.0.1:22973', undefined, fetch)
+  const nodeProvider = web3.getCurrentNodeProvider()
+
+  const signer = await getSigner()
+  const { contractInstance: burn } = await Burn.deploy(signer, { initialFields: {} })
+  const { tokenId } = await mintToken(signer.address, 10n)
+
+  await burn.transact.main({
+    signer,
+    args: { tokenId },
+    tokens: [{ id: tokenId, amount: 1n }]
+  })
+
+  const balance = await nodeProvider.addresses.getAddressesAddressBalance(
+    signer.address
+  )
+  console.assert(balance.tokenBalances![0].amount === "9")
+}
+
+test()
+```
+
+`mintToken` is a helper function from the Web3 SDK to mint a token and transfer to a specific address. In the example above, we minted a token with id `tokenId` and transferred `10` of it to `signer.address`.
+
+When calling the `main` function in the `Burn` contract, we pass in the `tokenId` as argument and approve 1 token from the signer. After calling the `main` function, the token balance of the signer's address goes from `10` to `9`.
+
+This approach of explicitly approving assets for function calls is required by Alephium's asset permission system. It makes sure that functions can only use assets that you've specifically allowed them to use, similar to authorizing a specific payment amount for a merchant rather than giving them unlimited access to your bank account. We'll dive deeper into this system later.
+
+##### Using Contract Assets
+
+Under Alephium's sUTXO model, a contract has exactly one UTXO that manages all of its assets. When a function needs to access the contract's assets, it must explicitly enable it by using the `assetsInContract = true` annotation. This design choice provides several important benefits:
+
+- It makes the code easier to reason about
+- It prevents unintended access of contract assets
+- It creates a lock on the function to prevent re-entrancy attacks
+
+```rust
+Contract Withdraw() {
+  @using(assetsInContract = true, checkExternalCaller = false)
+  pub fn withdraw() -> () {
+    let caller = callerAddress!()
+    transferTokenFromSelf!(caller, selfTokenId!(), 1)
+    transferTokenFromSelf!(caller, ALPH, dustAmount!())
+  }
+}
+```
+
+In the example above, the `withdraw` function uses the contract's assets, and it transfers 1 token and dust amount of ALPH to the caller. Dust amount is the minimal amount of ALPH required for each UTXO to prevent the bloating of UTXO set, it is currently set to `0.001` ALPH.
+
+We can test the `Withdraw` contract using the TypeScript code below:
+
+```typescript
+import { ONE_ALPH, web3 } from '@alephium/web3'
+import { getSigner, mintToken } from '@alephium/web3-test'
+import { Withdraw } from '../artifacts/ts'
+
+async function test() {
+  web3.setCurrentNodeProvider('http://127.0.0.1:22973', undefined, fetch)
+  const nodeProvider = web3.getCurrentNodeProvider()
+
+  const signer = await getSigner()
+  const { contractInstance: withdraw } = await Withdraw.deploy(signer, {
+    initialFields: {},
+    initialAttoAlphAmount: ONE_ALPH,
+    issueTokenAmount: 10n
+  })
+
+  await withdraw.transact.withdraw({ signer })
+
+  async function getBalance(address: string) {
+    return await nodeProvider.addresses.getAddressesAddressBalance(address)
+  }
+  const signerBalance = await getBalance(signer.address)
+  console.assert(signerBalance.tokenBalances![0].amount === "1")
+  const contractBalance = await getBalance(withdraw.address)
+  console.assert(contractBalance.tokenBalances![0].amount === "9")
+}
+
+test()
+```
+
+In the example above, we deploy the `Withdraw` contract with 1 ALPH and 10 tokens. After calling the `withdraw` function, the token balance of the contract goes from `10` to `9` and the token balance of the signer address goes from `0` to `1`.
+
+During compilation, the compiler will throw errors if:
+
+- A function is annotated with `assetsInContract = false` but uses contract assets
+- A function is annotated with `assetsInContract = true` but does not use contract assets
+
+Note that because of the `assetsInContract = true` annotation, the `withdraw` function can only be called once in the same transaction. If you try to call it again, the compiler will report an error. This prevents the re-entrancy attacks.
+
+##### Pay To Contract Only
+
+Functions that only receive assets into the contract rather than spending them are not vulnerable to re-entrancy attacks. For such functions, you can use the `payToContractOnly = true` annotation instead of `assetsInContract = true` to load the contract assets, as shown in the example below:
+
+```rust
+Contract Deposit() {
+  @using(
+      preapprovedAssets = true,
+      payToContractOnly = true,
+      checkExternalCaller = false
+  )
+  pub fn deposit(caller: Address) -> () {
+    transferTokenToSelf!(caller, ALPH, 1 alph)
+  }
+}
+
+TxScript DepositTwice(contract: Deposit) {
+  let caller = callerAddress!()
+  contract.deposit{caller -> ALPH: 1 alph}(caller)
+  contract.deposit{caller -> ALPH: 1 alph}(caller)
+}
+```
+
+In the example above, the `deposit` function is annotated with `payToContractOnly = true`, which means that the function only receives assets into the contract. This allows the `DepositTwice` transaction script to call the `deposit` function more than once in the same transaction. `TxScript` (Transaction Script) is a unique feature in Alephium for initiating transactions, which we'll cover in more detail later. Web3 SDK provides an easy way to execute the `TxScript` as shown below:
+
+```typescript
+import { ONE_ALPH, web3 } from '@alephium/web3'
+import { getSigner, mintToken } from '@alephium/web3-test'
+import { Deposit, DepositTwice } from '../artifacts/ts'
+
+async function test() {
+  web3.setCurrentNodeProvider('http://127.0.0.1:22973', undefined, fetch)
+  const nodeProvider = web3.getCurrentNodeProvider()
+
+  const signer = await getSigner()
+  const { contractInstance: deposit } = await Deposit.deploy(signer, {
+    initialFields: {},
+    initialAttoAlphAmount: ONE_ALPH,
+  })
+
+  await DepositTwice.execute(signer, {
+    initialFields: {
+      contract: deposit.contractId
+    },
+    attoAlphAmount: ONE_ALPH * 2n
+  })
+
+  const contractBalance = await nodeProvider.addresses.getAddressesAddressBalance(
+    deposit.address
+  )
+  console.assert(BigInt(contractBalance.balance) === ONE_ALPH * 3n)
+}
+
+test()
+```
+
+After we execute the `DepositTwice` transaction script, the contract balance increases from `1` ALPH to `3` ALPH. This happens because the script calls the `deposit` function twice, transferring `1` ALPH each time to the contract that already had an initial balance of `1` ALPH.
+
+##### Update Fields
+
+Functions that update contract fields must be explicitly annotated with `@using(updateFields = true)`. The Ralph compiler enforces this through warnings in two scenarios: when a function modifies contract fields without this annotation, or when a function is annotated with `@using(updateFields = true)` but doesn't actually modify any fields. This design ensures that developers are always explicit about which functions can update the contract's state, improving code clarity and reducing potential bugs.
+
+```rust
+Contract Counter(mut counter: U256) {
+  @using(updateFields = true, checkExternalCaller = false)
+  pub fn increase() -> () {
+    counter += 1
+  }
+}
+```
+
+In the example above, the `increase` function is annotated with `@using(updateFields = true)`, which means that the function updates the contract fields. We can test the `Counter` contract using the TypeScript code below:
+
+```typescript
+import { ONE_ALPH, web3 } from '@alephium/web3'
+import { getSigner, mintToken } from '@alephium/web3-test'
+import { Counter } from '../artifacts/ts'
+
+async function test() {
+  web3.setCurrentNodeProvider('http://127.0.0.1:22973')
+  const nodeProvider = web3.getCurrentNodeProvider()
+
+  const signer = await getSigner()
+  const { contractInstance: counter } = await Counter.deploy(signer, {
+    initialFields: { counter: 0n },
+  })
+
+  console.assert((await counter.fetchState()).fields.counter === 0n)
+  await counter.transact.increase({ signer })
+  console.assert((await counter.fetchState()).fields.counter === 1n)
+}
+
+test()
+```
+
+We deploy the `Counter` contract with an initial counter value of `0`. After calling the `increase` function, the counter value is incremented to `1`.
+
+##### Check External Caller
+
+Security is extremely important in smart contracts, and one critical aspect is checking the identity of function callers. To prevent unauthorized access, Ralph's compiler automatically generates warnings for public functions that don't implement external caller check. This check can be suppressed with the annotation `@using(checkExternalCaller = false)`, but it should be done cautiously and only when unrestricted access poses no security risk to your contract.
+
+The compiler will skip the external caller check for `view` functions. A `view` function must satisfy all of the following conditions:
+
+- It cannot change the contract fields
+- It cannot transfer any assets
+- All functions called in a `view` function must also be `view` functions as well
+
+To check the identity of a function caller, Ralph provides the built-in function `checkCaller!`. This function takes two parameters: a boolean condition that should evaluate to `true` for authorized callers, and an error code to return if the caller is not authorized.
+
+There are also a few built-in functions that can be used to get the caller's information:
+
+- `callerAddress!()`: Returns caller's address. When called from a `TxScript`, it returns the address of the user who initiated the transaction. When called by another contract, it returns the address of that contract.
+- `callerContractId!()`: Returns caller's contract ID. This function can only be used when the caller is a contract. If called from a `TxScript` it will fail the transaction with the `NoCaller` error.
+
+```rust
+Contract CheckExternal(owner: Address, mut value: U256) {
+    pub fn getValue() -> U256 {
+        return getValuePrivate()
+    }
+
+    @using(updateFields = true)
+    pub fn setValue(v: U256) -> () {
+        checkCaller!(callerAddress!() == owner, 0)
+        value = v
+    }
+
+    @using(updateFields = true, checkExternalCaller = false)
+    pub fn setValueUnsafe(v: U256) -> () {
+        value = v
+    }
+
+    fn getValuePrivate() -> U256 {
+        return value
+    }
+}
+```
+
+In the `CheckExternal` contract, `getValue` is a `view` function, so no external caller checks are needed. The `setValue` function updates contract fields and properly checks the caller using `checkCaller!`. Meanwhile, `setValueUnsafe` also updates fields but deliberately bypasses the external caller check with the `@using(checkExternalCaller = false)` annotation.
+
+We can test the `CheckExternal` contract using the TypeScript code below:
+
+```typescript
+import { web3 } from '@alephium/web3'
+import { getSigner } from '@alephium/web3-test'
+import { CheckExternal } from '../artifacts/ts'
+
+async function test() {
+  web3.setCurrentNodeProvider('http://127.0.0.1:22973')
+  const nodeProvider = web3.getCurrentNodeProvider()
+
+  const signer = await getSigner()
+  const { contractInstance: checkExternal } = await CheckExternal.deploy(signer, {
+    initialFields: { owner: signer.address, value: 0n },
+  })
+
+  console.assert((await checkExternal.view.getValue()).returns === 0n)
+  await checkExternal.transact.setValue({ signer, args: { v: 1n } })
+  console.assert((await checkExternal.view.getValue()).returns === 1n)
+  await checkExternal.transact.setValueUnsafe({ signer, args: { v: 2n } })
+  console.assert((await checkExternal.view.getValue()).returns === 2n)
+}
+
+test()
+```
+
+In test code above, we deploy the `CheckExternal` contract and set the initial owner to `signer.address` and initial value to `0`. We then call the `setValue` and `setValueUnsafe` functions to update the value to `1` and `2` respectively. Note that if `setValue` is not called using `signer`, transaction will abort with error code `0`.
+
