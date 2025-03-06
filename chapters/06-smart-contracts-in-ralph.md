@@ -1023,3 +1023,88 @@ test()
 
 In test code above, we deploy the `CheckExternal` contract and set the initial owner to `signer.address` and initial value to `0`. We then call the `setValue` and `setValueUnsafe` functions to update the value to `1` and `2` respectively. Note that if `setValue` is not called using `signer`, transaction will abort with error code `0`.
 
+#### Function Calls
+
+Functions can be called in two ways: directly by name when they belong to the current contract (internal calls), or using the `contractInstance.functionName()` notation when calling functions from other contracts (external calls).
+
+```rust
+Contract FunctionCalls(fib: Fib, mut result: U256) {
+  @using(checkExternalCaller = false)
+  pub fn runFib(n: U256) -> () {
+    let res = fib.cal(n)
+    updateResult(res)
+  }
+
+  @using(updateFields = true)
+  fn updateResult(res: U256) -> () {
+    result = res
+  }
+}
+
+Contract Fib() {
+  @using(checkExternalCaller = false)
+  pub fn cal(n: U256) -> U256 {
+    if (n <= 1) {
+      return n
+    }
+    // Recursive function calls to calculate Fibonacci number
+    return cal(n - 1) + cal(n - 2)
+  }
+}
+```
+
+In the example above, `FunctionCalls` is a contract that contains a function `runFib` that calls the `cal` function of the `Fib` contract. The `cal` function is a recursive function that calculates the Fibonacci number.
+
+We can test the `FunctionCalls` contract using the TypeScript code below:
+
+```typescript
+import { web3 } from '@alephium/web3'
+import { getSigner } from '@alephium/web3-test'
+import { FunctionCalls, Fib } from '../artifacts/ts'
+
+async function test() {
+  web3.setCurrentNodeProvider('http://127.0.0.1:22973', undefined, fetch)
+
+  const signer = await getSigner()
+  const { contractInstance: fib } = await Fib.deploy(signer, { initialFields: {} })
+  const { contractInstance: functionCalls } = await FunctionCalls.deploy(
+     signer,
+     { initialFields: { fib: fib.contractId, result: 0n } }
+  )
+  await functionCalls.transact.runFib({ signer, args: { n: 10n } })
+
+  const state = await functionCalls.fetchState()
+  console.assert(state.fields.result === 55n)
+}
+
+test()
+```
+
+Note that we deployed the `Fib` contract first and then passed its contract id to the `FunctionCalls` contract. The result of running the `runFib` function with `n = 10` is `55`.
+
+##### Asset Approval
+
+When calling a function, you can specify the assets that the function is authorized to use with braces syntax. This is part of Alephium's Asset Permission System (APS), which ensures explicit asset flow for each function call. For example, in the [Using Approved Assets](#using-approved-assets) section, we approved `1` token for the `burn` function, restricting its access to only `1` token regardless of the caller's total balance:
+
+```rust
+burn{caller -> tokenId: 1}(caller, tokenId)
+```
+
+You can also approve multiple assets from multiple users using the braces syntax:
+
+```rust
+// Approve a certain amount of token1 for swapping
+tokenPair.swap{caller -> token1Id: amount1In}(
+  caller, to, amount0In, amount1In, amount0Out, amount1Out
+)
+
+// Approve a certain amount of ALPH for buying an NFT
+nftMarketplace.buyNFT{caller -> ALPH: totalPayment}(tokenId)
+
+// Approve multiple assets from multiple users
+otc.exchange {
+  user0 -> ALPH: amount00, tokenId: amount01;
+  user1 -> ALPH: amount10, tokenId: amount11
+}(user0, amount00, amount01, user1, amount10, amount11)
+```
+
