@@ -1108,3 +1108,89 @@ otc.exchange {
 }(user0, amount00, amount01, user1, amount10, amount11)
 ```
 
+#### Control Structure
+Ralph provides several control structures for managing program flow, including conditional statements, loops, and error handling mechanisms.
+
+##### Conditional Statement
+
+Ralph supports conditional statements with `if`, `else if`, and `else` clauses. Conditional statements can be used as expressions that return a value or as statements that control program flow:
+
+```rust
+Contract Conditional() {
+    pub fn ifExpr(a: U256) -> ByteVec {
+       return if (a == 0) #00 else if (a == 1) #01 else #02
+    }
+
+    pub fn ifStmt(a: U256) -> ByteVec {
+        if (a == 0) {
+            return #00
+        } else if (a == 1) {
+            return #01
+        } else {
+            return #02
+        }
+    }
+}
+```
+
+##### Loops
+
+Ralph supports both `while` loops and `for` loops for iterative operations:
+
+```rust
+Contract Loop() {
+    pub fn whileStmt() -> U256 {
+        let mut index = 0
+        let mut sum = 0
+        while (index <= 4) {
+          sum += index
+          index += 1
+        }
+        return sum
+    }
+
+    pub fn forStmt() -> U256 {
+        let array = [1, 2, 3, 4, 5]
+        let mut sum = 0
+        for (let mut i = 0; i <= 5; i += 1) {
+            sum += array[i]
+        }
+        return sum
+    }
+}
+```
+
+Ralph doesn't support `break` and `continue` statements. This intentional design choice encourages developers to write loop structures that is easier to reason about and less prone to complex control flow issues that can arise from mid-loop jumps. It's recommended to replace them with early `return` or `assert` function.
+
+##### Error Handling
+
+Ralph provides two builtin assertion functions for error handling: `assert!` and `panic!`. Assertion failure will revert all changes made to the world state by the transaction and stop the execution of the transaction immediately. Unlike many other languages, Ralph doesn't support try-catch error handling since it complicates control flow and makes code harder to reason about.
+
+```rust
+Contract ErrorHandling() {
+    enum ErrorCodes {
+        InvalidContractState = 0
+    }
+
+    pub fn assert(cond: Bool) -> () {
+      assert!(cond, ErrorCodes.InvalidContractState)
+    }
+
+    pub fn panicWithErrorCode(cond: Bool) -> U256 {
+      if (!cond) {
+        panic!(ErrorCodes.InvalidContractState)
+      }
+      return 0
+    }
+
+    pub fn panicWithoutErrorCode(cond: Bool) -> U256 {
+      if (!cond) {
+        panic!()
+      }
+      return 0
+    }
+}
+```
+
+Both `assert!` and `panic!` abort transactions immediately. `assert!` verifies a condition is true with a mandatory error code, while `panic!` signals an unrecoverable error with an optional error code.
+
