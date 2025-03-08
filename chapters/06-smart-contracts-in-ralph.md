@@ -1194,3 +1194,401 @@ Contract ErrorHandling() {
 
 Both `assert!` and `panic!` abort transactions immediately. `assert!` verifies a condition is true with a mandatory error code, while `panic!` signals an unrecoverable error with an optional error code.
 
+#### Built-in Functions
+
+Ralph includes a set of built-in functions that enable developers to leverage VM-specific features, and build secure and efficient smart contracts. These functions are organized into the following categories: `Contract Functions`, `Sub-contract Functions`, `Asset Functions`, `Chain Functions`, `Utils Functions`, and `Cryptography Functions`.
+
+This section will not aim to cover the [complete list](https://docs.alephium.org/ralph/built-in-functions) of built-in functions. Instead, we will focus on explaining the most commonly used built-in functions through examples.
+
+###### Contract Functions
+
+Ralph provides built-in functions for contract creation, migration, and destruction. In Alephium, tokens are also issued through contract creation.
+
+```rust
+Contract CarFactory(mut carId: ByteVec) {
+    @using(preapprovedAssets = true, checkExternalCaller = false, updateFields = true)
+    pub fn createCar(
+        carByteCode: ByteVec,
+        model: ByteVec,
+        year: U256,
+        initialPrice: U256
+    ) -> Car {
+        let (immFields, mutFields) = Car.encodeFields!(model, year, initialPrice)
+        carId = createContract!{callerAddress!() -> ALPH: minimalContractDeposit!()}(
+            carByteCode, immFields, mutFields
+        )
+        return Car(carId)
+    }
+
+    @using(preapprovedAssets = true, checkExternalCaller = false, updateFields = true)
+    pub fn copyCreateCar(
+        carContractId: ByteVec,
+        model: ByteVec,
+        year: U256,
+        initialPrice: U256
+    ) -> Car {
+        let (immFields, mutFields) = Car.encodeFields!(model, year, initialPrice)
+        carId = copyCreateContract!{callerAddress!() -> ALPH: mini
+malContractDeposit!()}(
+            carContractId, immFields, mutFields
+        )
+        return Car(carId)
+    }
+
+    @using(preapprovedAssets = true, checkExternalCaller = false, updateFields = true)
+    pub fn copyCreateCarWithToken(
+        carContractId: ByteVec,
+        model: ByteVec,
+        year: U256,
+        initialPrice: U256,
+        tokenAmount: U256
+    ) -> Car {
+        let (immFields, mutFields) = Car.encodeFields!(model, year, initialPrice)
+        carId = copyCreateContractWithToken!{callerAddress!() -> ALPH: minimalContractDeposit!()}(
+            carContractId, immFields, mutFields, tokenAmount
+        )
+        return Car(carId)
+    }
+}
+
+Contract Car(model: ByteVec, year: U256, mut price: U256) {
+    @using(checkExternalCaller = false, updateFields = true)
+    pub fn updatePrice(newPrice: U256) -> () {
+        price = newPrice
+    }
+
+    pub fn getCarInfo() -> (ByteVec, U256, U256) {
+        return model, year, price
+    }
+}
+```
+
+In the example above, `createCar` and `copyCreateCar` use the `createContract!` and `copyCreateContract!` built-in functions, respectively, to create a new contract. The difference between the two is that `createContract!` creates a new contract using the contract's bytecode, while `copyCreateContract!` creates a new contract by copying the bytecode from an existing contract, which is a lot more gas efficient. If the goal is to create many instance of the same contract, `copyCreateContract!` is recommended.
+
+Contracts in Alephium have both immutable and mutable fields, which are stored and handled differently in the VM for security and efficiency reasons. When creating a contract, you must provide encoded versions of both the immutable and mutable fields. The `encodeFields!` built-in function handles this encoding for you. In the example above, `Car.encodeFields!` encodes the `model`, `year`, and `price` fields and returns a tuple containing both the encoded immutable and mutable fields, which can be passed to the `createContract!` and `copyCreateContract!` built-in functions.
+
+`copyCreateCarWithToken` is similar to `copyCreateCar`, but it also allows you to issue a specific amount of tokens for the newly created contract using the `copyCreateContractWithToken!` built-in function.
+
+In Alephium, tokens are issued through contract creation, and the token ID is exactly the same as the contract ID. By default, the issued tokens will be owned by the contract itself. However, `copyCreateContractWithToken!` provides also allows you to specify a recipient for the issued tokens.
+
+Let's test the `Car` and `CarFactory` contracts using the TypeScript code below:
+
+```typescript
+import {
+  binToHex, stringToHex, tokenIdFromAddress, web3,
+  MINIMAL_CONTRACT_DEPOSIT, NULL_CONTRACT_ADDRESS, NodeProvider,
+} from '@alephium/web3'
+import { getSigner } from '@alephium/web3-test'
+import { Car, CarFactory } from '../artifacts/ts'
+
+async function test() {
+  web3.setCurrentNodeProvider('http://127.0.0.1:22973')
+  const nodeProvider = new NodeProvider('http://127.0.0.1:22973')
+
+  const signer = await getSigner()
+  const carInfos = { model: stringToHex('Toyota'), year: 2020n, price: 10000n }
+
+  const { contractInstance: carTemplate } = await Car.deploy(signer, {
+     initialFields: carInfos
+  })
+  const { contractInstance: carFactory } = await CarFactory.deploy(signer, {
+     initialFields: { carAddress: NULL_CONTRACT_ADDRESS }
+  })
+
+  await carFactory.transact.createCar({
+    signer,
+    args: { carByteCode: Car.contract.bytecode, ...carInfos },
+    attoAlphAmount: MINIMAL_CONTRACT_DEPOSIT
+  })
+
+  await carFactory.transact.copyCreateCar({
+    signer,
+    args: { carContractId: carTemplate.contractId, ...carInfos },
+    attoAlphAmount: MINIMAL_CONTRACT_DEPOSIT
+  })
+
+  await carFactory.transact.copyCreateCarWithToken({
+    signer,
+    args: {
+      carContractId: carTemplate.contractId,
+      tokenAmount: 10000n,
+      ...carInfos,
+    },
+    attoAlphAmount: MINIMAL_CONTRACT_DEPOSIT
+  })
+
+  const carAddress = (await carFactory.fetchState()).fields.carAddress
+  const carTokenId = binToHex(tokenIdFromAddress(carAddress))
+  const balance = await nodeProvider.addresses.getAddressesAddressBalance(carAddress)
+  console.assert(
+    balance.tokenBalances?.length === 1 &&
+      balance.tokenBalances?.[0]?.id === carTokenId &&
+      BigInt(balance.tokenBalances?.[0]?.amount) === 10000n
+  )
+}
+
+test()
+```
+
+In the example above, we first deployed the `Car` contract as a template. Then we deployed the `CarFactory` contract and created three different `Car` contract instances:
+
+1. Using the `createCar` method, which takes the bytecode of the `Car` contract as an argument
+2. Using the `copyCreateCar` method, which takes the contract ID of the `Car` template contract as the argument, which is more gas efficient
+3. Using the `copyCreateCarWithToken` method, which not only creates a new `Car` contract instance but also issues 10000 tokens
+
+In the end, we verify that the tokens were correctly issued and owned by the last `Car` contract instance.
+
+Ralph also provides built-in ways to migrate contract code with the `migrate!()` and `migrateWithFields!()` built-in functions. This is more secure and straightforward than the traditional proxy contract pattern, as demonstrated in the example below:
+
+```rust
+Contract OldCode(owner: Address, n: U256) {
+    pub fn get() -> U256 {
+        return n
+    }
+
+    @using(checkExternalCaller = false)
+    pub fn migrate(newCode: ByteVec) -> () {
+        checkCaller!(callerAddress!() == owner, 0)
+        migrate!(newCode)
+    }
+
+    // Please check owner in production code
+    @using(updateFields = true)
+    pub fn migrateWithFields(newCode: ByteVec, newN: U256) -> () {
+        checkCaller!(callerAddress!() == owner, 0)
+        let (immFields, mutFields) = NewCode.encodeFields!(owner, newN)
+        migrateWithFields!(newCode, immFields, mutFields)
+    }
+}
+
+Contract NewCode(owner: Address, mut n: U256) {
+    pub fn get() -> U256 {
+        return n
+    }
+
+    @using(updateFields = true)
+    pub fn set(m: U256) -> U256 {
+        checkCaller!(callerAddress!() == owner, 0)
+        n = m
+        return n
+    }
+
+    @using(assetsInContract = true)
+    pub fn destroy() -> () {
+        checkCaller!(callerAddress!() == owner, 0)
+        destroySelf!(owner)
+    }
+}
+```
+
+`migrate!()` function can be used if the new contract has exactly the same mutable and immutable fields as the old contract. Otherwise, `migrateWithFields!()` should be used to migrate the contract fields as well. Let's test this out in the TypeScript code below:
+
+```typescript
+import { getSigner } from '@alephium/web3-test'
+import { OldCode, NewCode } from '../artifacts/ts'
+
+async function test() {
+  const signer = await getSigner()
+  const { contractInstance: oldCode } = await OldCode.deploy(signer, {
+     initialFields: { owner: signer.address, n: 100n }
+  })
+
+  await oldCode.transact.migrateWithFields({
+    signer,
+    args: { newCode: NewCode.contract.bytecode, newN: 200n }
+  })
+
+  const newContract = await NewCode.at(oldCode.address)
+  const {returns: newN} = await newContract.view.get()
+  console.assert(newN === 200n)
+  await newContract.transact.set({signer, args: {m: 300n}})
+  const {returns: newN2} = await newContract.view.get()
+  console.assert(newN2 === 300n)
+
+  await newContract.transact.destroy({ signer })
+}
+
+test()
+```
+
+The contract using `OldCode` is successfully migrated to the `NewCode` with the `newN` value after `migrateWithFields` function is called. We can continue to use the address of the old contract to interact with the new contract. New contract can also destroy itself and return the contract's deposit back to the owner using the `destroySelf!()` built-in function.
+
+###### Sub-contract Functions
+
+Alephium supports a unique and powerful feature called sub-contracts. This feature enables developers to construct tree-like structures across a group of related contracts that can be traversed similar to navigating through domain names. Compared to regular maps or tree data structures, sub-contracts offer more expressivity. Each node in the tree is a fully functional contract that can issue tokens, execute complex business logic, provide fine-grained access control to its internal state, and offer sophisticated permission management for its assets.
+
+Sub-contracts system also contributes to the long-term health of the Alephium blockchain by incentivizing users to recycle them when not needed. It also keeps things simple and elegant at the VM level since everything is a contract. Maps in Alephium is implemented on top of the sub-contracts system.
+
+Alephium supports a set of built-in functions to create sub-contracts and calculate sub-contract id. Since sub-contracts are also contracts, all other contract built-in functions can be used on them as well.
+
+```rust
+Contract Domain(url: ByteVec, subDomainTemplateId: ByteVec) {
+    @using(preapprovedAssets = true, checkExternalCaller = false)
+    pub fn createSubDomain(
+        subDomainUrl: ByteVec
+    ) -> Address {
+        let fullUrl = getFullUrl(subDomainUrl)
+        let (immFields, mutFields) = SubDomain.encodeFields!(fullUrl)
+        let subDomainId = copyCreateSubContract!{callerAddress!() -> ALPH: minimalContractDeposit!()}(
+            fullUrl, subDomainTemplateId, immFields, mutFields
+        )
+        return contractIdToAddress!(subDomainId)
+    }
+
+    pub fn getSubDomain(subDomainUrl: ByteVec) -> Address {
+        return contractIdToAddress!(subContractId!(getFullUrl(subDomainUrl)))
+    }
+
+    pub fn getFullUrl(subDomainUrl: ByteVec) -> ByteVec {
+        return url ++ b`/` ++ subDomainUrl
+    }
+}
+
+Contract SubDomain(url: ByteVec) {
+    pub fn getUrl() -> ByteVec {
+        return url
+    }
+}
+```
+
+In the example above, `Domain` is a contract initialized with a `SubDomain` template ID. The `createSubDomain` method creates a new `SubDomain` sub-contract using the `copyCreateSubContract!` built-in function, with `url` as the sub-contract path. Sub-contracts can also be created with `createSubContract!` and `copyCreateSubContractWithToken!` functions, similar to the `createContract!` and `copyCreateContractWithToken!` built-in functions for regular contracts.
+
+From the parent contract, the `subContractId!` built-in function allows us to deterministically compute a sub-contract's ID from its sub-contract path. In our example, the `getSubDomain` method uses this function to retrieve the address of a `SubDomain` contract by its URL.
+
+```typescript
+import {
+  addressFromContractId, stringToHex, subContractId,
+  MINIMAL_CONTRACT_DEPOSIT
+} from '@alephium/web3'
+import { getSigner } from '@alephium/web3-test'
+import { Domain, SubDomain } from '../artifacts/ts'
+
+async function test() {
+  const signer = await getSigner()
+  const { contractInstance: subDomainTemplate } = await SubDomain.deploy(signer, {
+     initialFields: { url: stringToHex('') }
+  })
+
+  const { contractInstance: domain } = await Domain.deploy(signer, {
+     initialFields: {
+        url: stringToHex('x.com'),
+        subDomainTemplateId: subDomainTemplate.contractId
+     }
+  })
+
+  await domain.transact.createSubDomain({
+    signer,
+    args: { subDomainUrl: stringToHex('home') },
+    attoAlphAmount: MINIMAL_CONTRACT_DEPOSIT
+  })
+
+  const {returns: subDomainContractAddress} = await domain.view.getSubDomain({
+    args: { subDomainUrl: stringToHex('home') }
+  })
+  const subDomainInstance = SubDomain.at(subDomainContractAddress)
+  console.assert((await subDomainInstance.view.getUrl()).returns === stringToHex('x.com/home'))
+
+  const subDomainContractId = subContractId(domain.contractId, stringToHex('x.com/home'), 0)
+  console.assert(subDomainContractAddress === addressFromContractId(subDomainContractId))
+}
+
+test()
+```
+
+In the test code above, we first deploy a `SubDomain` template contract. Then, we deploy the `Domain` contract with the URL `x.com` and the ID of the `SubDomain` template contract. Next, we call the `createSubDomain` method to create a `SubDomain` sub-contract with the URL `home`. The code then retrieves the address of the newly created `SubDomain` sub-contract using the `getSubDomain` method and verifies that its URL is correctly set to `x.com/home`. Finally, it demonstrates how to compute the sub-contract's ID directly using the `subContractId` function in the Web3 SDK and confirms that this matches the address returned by the contract method.
+
+###### Asset Functions
+
+Ralph provides a set of built-in functions to approve, transfer, lock or even burn assets within the smart contracts.
+
+```rust
+Contract AssetFunctions() {
+    @using(preapprovedAssets = true, checkExternalCaller = false)
+    pub fn burn() -> () {
+      burnToken!(callerAddress!(), selfTokenId!(), 1)
+    }
+
+    @using(preapprovedAssets = true, checkExternalCaller = false)
+    pub fn lock(amount: U256) -> () {
+        let caller = callerAddress!()
+        lockApprovedAssets!{caller -> ALPH: dustAmount!(), selfTokenId!(): amount}(
+            caller, blockTimeStamp!() + 86400000  // 1 day
+        )
+    }
+
+    @using(preapprovedAssets = true, checkExternalCaller = false, assetsInContract = true)
+    pub fn withdraw(amount: U256) -> () {
+        transferTokenFromSelf!(callerAddress!(), selfTokenId!(), amount)
+    }
+
+    @using(preapprovedAssets = true, checkExternalCaller = false, assetsInContract = true)
+    pub fn deposit(amount: U256) -> () {
+        transferTokenToSelf!(callerAddress!(), selfTokenId!(), amount)
+    }
+}
+```
+
+The `burnToken!()` built-in function allows the contract to burn a specific amount of a token, note that burning `ALPH` is not allowed. The `lockApprovedAssets!()` built-in function allows the contract to lock a specific amount of assets for a specific period of time. The `transferTokenFromSelf!()` built-in function allows the contract to transfer a specific amount of assets from itself to an address. The `transferTokenToSelf!()` built-in function allows an address to transfer a specific amount of tokens to the contract.
+
+`selfTokenId!()` built-in function returns the ID of the token issued by the contract, its value is the same as the contract ID. Let's test the `AssetFunctions` contract in the example below:
+
+```typescript
+import { getSigner } from '@alephium/web3-test'
+import { AssetFunctions } from '../artifacts/ts'
+import { Address, DUST_AMOUNT, NodeProvider } from '@alephium/web3'
+
+async function test() {
+  const signer = await getSigner()
+  const nodeProvider = new NodeProvider("http://localhost:22973")
+
+  const { contractInstance: asset } = await AssetFunctions.deploy(signer, {
+     initialFields: { owner: signer.address, n: 100n },
+     issueTokenAmount: 100n,
+     issueTokenTo: signer.address
+  })
+
+  async function getBalance(address: Address) {
+    const balance = await nodeProvider.addresses.getAddressesAddressBalance(address)
+    console.assert(balance.tokenBalances?.[0].id === asset.contractId)
+    return balance
+  }
+
+  await asset.transact.burn({
+     signer,
+     tokens: [{ id: asset.contractId, amount: 1n }]
+  })
+  const balance = await getBalance(signer.address)
+  console.assert(balance.tokenBalances?.[0].amount === "99")
+
+  await asset.transact.lock({
+     signer,
+     args: { amount: 1n },
+     attoAlphAmount: DUST_AMOUNT,
+     tokens: [{ id: asset.contractId, amount: 1n }]
+  })
+  const balance2 = await getBalance(signer.address)
+  console.assert(balance2.tokenBalances?.[0].amount === "99")
+  console.assert(balance2.lockedTokenBalances?.[0].amount === "1")
+
+  await asset.transact.deposit({
+    signer,
+    args: { amount: 1n },
+    tokens: [{ id: asset.contractId, amount: 1n }]
+  })
+  const balance3 = await getBalance(signer.address)
+  console.assert(balance3.tokenBalances?.[0].amount === "98")
+
+  await asset.transact.withdraw({
+    signer,
+    args: { amount: 1n },
+    tokens: [{ id: asset.contractId, amount: 1n }]
+  })
+  const balance4 = await getBalance(signer.address)
+  console.assert(balance4.tokenBalances?.[0].amount === "99")
+}
+
+test()
+```
+
+In this example, we deployed the `AssetFunctions` contract with 100 tokens issued to the signer, then demonstrated the effect of burning, locking and transferring assets.
+
