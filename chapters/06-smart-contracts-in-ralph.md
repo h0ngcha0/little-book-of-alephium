@@ -348,6 +348,9 @@ Contract ByteVec () {
       assert!(toByteVec!(100) == #4064, 5)
       assert!(toByteVec!(-100i) == #7f9c, 6)
 
+      assert!(size!(b`Hello World`) == 11, 7)
+      assert!(byteVecSlice!(b`Hello World`, 0, 5) == b`Hello`, 8)
+
       emit Debug(`Test successful for ByteVec`)
    }
 }
@@ -362,7 +365,7 @@ let b = b`World`
 let c = a ++ b` ` ++ b
 ```
 
-ByteVec values can be concatenated using the `++` operator, and other types can be converted to ByteVec using the `toByteVec!` built-in function.
+ByteVec values can be concatenated using the `++` operator, and other types can be converted to ByteVec using the `toByteVec!` built-in function. There are also built-in functions to get the size of a ByteVec and to slice a ByteVec.
 
 ##### Address
 
@@ -1196,9 +1199,9 @@ Both `assert!` and `panic!` abort transactions immediately. `assert!` verifies a
 
 #### Built-in Functions
 
-Ralph includes a set of built-in functions that enable developers to leverage VM-specific features, and build secure and efficient smart contracts. These functions are organized into the following categories: `Contract Functions`, `Sub-contract Functions`, `Asset Functions`, `Chain Functions`, `Utils Functions`, and `Cryptography Functions`.
+Ralph includes a set of built-in functions that enable developers to leverage VM-specific features, and build secure and efficient smart contracts. These functions are organized into the following categories: `Contract Functions`, `Sub-contract Functions`, `Asset Functions`, `Chain Functions`, `Utils Functions`, and `Cryptography Functions`. In Ralph, built-in functions are easily identifiable by their naming convention: they always end with an exclamation mark (`!`).
 
-This section will not aim to cover the [complete list](https://docs.alephium.org/ralph/built-in-functions) of built-in functions. Instead, we will focus on explaining the most commonly used built-in functions through examples.
+This section will not attempt to cover the [complete list](https://docs.alephium.org/ralph/built-in-functions) of built-in functions. Instead, we will focus on explaining the most commonly used built-in functions using examples.
 
 ###### Contract Functions
 
@@ -1591,4 +1594,100 @@ test()
 ```
 
 In this example, we deployed the `AssetFunctions` contract with 100 tokens issued to the signer, then demonstrated the effect of burning, locking and transferring assets.
+
+###### Utils Functions
+
+Ralph provides various built-in utility functions that simplify common operations and provide access to important system values when developing smart contracts.
+
+```rust
+Contract UtilsFunctions() {
+    pub fn test() -> () {
+        assert!(zeros!(2) == #0000, 1)
+        assert!(groupOfAddress!(@1H5irSsGHAZSQKcetPPtTDXmS4tZVcM9bEi57jSWhY4CZ) == 3, 2)
+        assert!(isAssetAddress!(@1H5irSsGHAZSQKcetPPtTDXmS4tZVcM9bEi57jSWhY4CZ) == true, 3)
+        assert!(isContractAddress!(@1H5irSsGHAZSQKcetPPtTDXmS4tZVcM9bEi57jSWhY4CZ) == false, 4)
+        assert!(isContractAddress!(@weQT3a8gsdGoZSEFeXsCVJqGQ9fWdufE2nNsDysdojBf) == true, 5)
+        assert!(len!([1,2,3,4]) == 4, 6)
+        assert!(nullContractAddress!() == @tgx7VNFoP9DJiFMFgXXtafQZkUvyEdDHT9ryamHJYrjq, 7)
+        assert!(minimalContractDeposit!() == 0.1 alph, 8)
+        assert!(mapEntryDeposit!() == 0.1 alph, 9)
+    }
+}
+```
+
+The `UtilsFunctions` contract demonstrates several utility functions available in Ralph:
+
+- `zeros!(n)`: Creates a ByteVec filled with n zeros
+- `groupOfAddress!(address)`: Returns the group number of an address. Alephium is a sharded blockchain with multiple groups where each address belongs to one group.
+- `isAssetAddress!(address)`: Checks if an address is a user address
+- `isContractAddress!(address)`: Checks if an address is a contract address
+- `len!(array)`: Returns the length of an fixed-sized array
+- `nullContractAddress!()`: Returns the null contract address which is useful to set a default value for a contract field. Its corresponding contract id is `#0000000000000000000000000000000000000000000000000000000000000000`
+- `minimalContractDeposit!()`: Returns the minimum deposit required to create a contract
+- `mapEntryDeposit!()`: Returns the deposit required for each new map entry
+
+###### Chain Functions
+
+Ralph provides a set of built-in functions that allow the contract to get the chain and transaction information, such as the current block timestamp, block target, transaction id, transactin inputs, gas info, and more.
+
+```rust
+TxScript Chain {
+    emit Debug(`Network id: ${networkId!()}`)
+    emit Debug(`Block timestamp: ${blockTimeStamp!()}`)
+    emit Debug(`Block target: ${blockTarget!()}`)
+    emit Debug(`Transaction id: ${txId!()}`)
+    emit Debug(`Transaction input size: ${txInputsSize!()}`)
+    emit Debug(`First transaction input address: ${txInputAddress!(0)}`)
+    emit Debug(`Gas fee: ${txGasFee!()}`)
+    emit Debug(`Gas amount: ${txGasAmount!()}`)
+    assert!(dustAmount!() == 0.001 alph, 0)
+    verifyAbsoluteLocktime!(blockTimeStamp!() - 1)
+}
+```
+
+As we can see in the example above, the `Chain` transaction script uses the built-in functions to emit the current block timestamp, block target, transaction id, transactin inputs, gas fee and amount, and more.
+
+`dustAmount!()` returns the minimal amount of ALPH required per UTXO (currently 0.001 ALPH). This prevents the creation of tiny UTXOs that would increase blockchain storage and processing overhead.
+
+Ralph provides two built-in functions to verify time constraints: `verifyAbsoluteLocktime!()` checks if the current block timestamp has reached or exceeded a specified time point, while `verifyRelativeLocktime!()` ensures a certain amount of time has passed since the UTXO was created. Both of these time-locking mechanisms are useful for implementing secure financial applications like token vesting schedules, time-locked wallets, and governance proposals with mandatory waiting periods.
+
+###### Cryptography Functions
+
+Ralph provides a set of built-in functions to compute cryptographic hashes and verify signatures. It also provides the `ethEcRecover!()` built-in function to recover the signer's address from a message and a signature.
+
+```rust
+Contract CryptographyFunctions() {
+    pub fn verifyHash() -> () {
+        let input = b`Hello World1`
+        assert!(blake2b!(input) == #8947bee8a082f643a8ceab187d866e8ec0be8c2d7d84ffa8922a6db77644b37a, 0)
+        assert!(keccak256!(input) == #2744686CE50A2A5AE2A94D18A3A51149E2F21F7EEB4178DE954A2DFCADC21E3C, 0)
+        assert!(sha256!(input) == #6D1103674F29502C873DE14E48E9E432EC6CF6DB76272C7B0DAD186BB92C9A9A, 0)
+        assert!(sha3!(input) == #f5ad69e6b85ae4a51264df200c2bd19fbc337e4160c77dfaa1ea98cbae8ed743, 0)
+    }
+
+    pub fn verifySignature() -> () {
+        let message = #0000000000000000000000000000000000000000000000000000000000000000
+        let p256PubKey = #0326e4868d3fc321680ccbecd6d12cfb75640f229515c674e84a43d7585c9c69a5
+        let p256Sig = #2a970fde2bdf8ad911787aeca7efceddba5927696c15a9c56cec78fe2a16a9d50d883e519733370a4baa7d0c8b15cdf10d7cfca19b84fea44d9827474516cfee
+        verifySecP256K1!(message, p256PubKey, p256Sig)
+
+        let ed25519PubKey = #64bfbce13535b2ab9fa15d5dc73788ebf9552dd05aed5952d208712f653f87cd
+        let ed25519Sig = #77006f93e346282b18753b563f5bf4b47a879659b25aa0766bcff215691cdb5fa547616ac43ad71b3cb65b58c9ab9653fd0016efed1415c5cfac2e6bb944fe03
+        verifyED25519!(message, ed25519PubKey, ed25519Sig)
+
+        let bip340PubKey = #b72540c454b7ee2e92b062cdcc6cb8bb2774c2e0dc8d8d5274e9c641b38a284a
+        let bip340Sig = #48d18651d3399889acc4813b517c39fe88463796a5d6e6c154cdc05d3caf0fa1dff1f08561617679f6a5a9e1a05c8f2c46bc329b633080a31c7816a964134e8e
+        verifyBIP340Schnorr!(message, bip340PubKey, bip340Sig)
+    }
+
+    pub fn verifyEthEcRecover() -> () {
+        let messageHash = #d058b58f0b2cd0612f1619f3936dd1012cbc1a1616e02d1d83d43ea0129cb650
+        let signature = #2c6401216c9031b9a6fb8cbfccab4fcec6c951cdf40e2320108d1856eb532250576865fbcd452bcdc4c57321b619ed7a9cfd38bd973c3e1e0243ac2777fe9d5b1b
+        let address = ethEcRecover!(messageHash, signature)
+        assert!(address == #31b26e43651e9371c88af3d36c14cfd938baf4fd, 0)
+    }
+}
+```
+
+The supported hash algorithms are `blake2b`, `keccak256`, `sha256` and `sha3`. The supported signature algorithms are `secp256k1`, `ed25519` and `bip340`.
 
