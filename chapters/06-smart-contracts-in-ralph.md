@@ -1834,3 +1834,481 @@ Sub-contracts provide a powerful abstraction for building complex smart contract
 
 Please refer to the built-in [Sub-contracts Functions](#sub-contract-functions) section for a concrete example of how to create and interact with sub-contracts.
 
+#### Contract Inheritance
+
+Ralph supports multiple inheritance, allowing contracts to inherit from multiple abstract contracts and implement multiple interfaces. This enables Ralph contracts to combine logic and state from different sources in a hierarchical way, similar to object-oriented programming.
+
+```rust
+Interface Payable {
+   @using(preapprovedAssets = true)
+   pub fn pay(amount: U256) -> U256
+}
+
+Interface WorkStatus {
+    pub fn status() -> ByteVec
+}
+
+Abstract Contract Employee(name: ByteVec, id: U256) {
+    pub fn getName() -> ByteVec {
+        return name
+    }
+    pub fn getId() -> U256 {
+        return id
+    }
+}
+
+Abstract Contract TechnicalStaff(name: ByteVec, id: U256) {
+    pub fn getSpecialization() -> ByteVec
+    pub fn getStandardWorkingHours() -> U256 {
+        return 40
+    }
+}
+
+Abstract Contract ManagementStaff(name: ByteVec, id: U256) {
+    pub fn getManagementLevel() -> ByteVec
+}
+
+
+Contract SoftwareEngineer(name: ByteVec, id: U256)
+  extends Employee(name, id), TechnicalStaff(name, id) implements Payable, WorkStatus {
+    @using(preapprovedAssets = true, assetsInContract = true, checkExternalCaller = false)
+    pub fn pay(amount: U256) -> U256 {
+        transferTokenToSelf!(callerAddress!(), ALPH, amount)
+        return amount
+    }
+
+    pub fn status() -> ByteVec {
+        return b`Coding...`
+    }
+
+    pub fn getSpecialization() -> ByteVec {
+        return b`Software`
+    }
+}
+
+Contract Director(name: ByteVec, id: U256)
+  extends Employee(name, id), ManagementStaff(name, id) implements Payable, WorkStatus {
+    @using(preapprovedAssets = true, assetsInContract = true, checkExternalCaller = false)
+    pub fn pay(amount: U256) -> U256 {
+        let finalAmount = amount * 12 / 10
+        transferTokenToSelf!(callerAddress!(), ALPH, finalAmount)
+        return finalAmount
+    }
+
+    pub fn status() -> ByteVec {
+        return b`Managing...`
+    }
+
+    pub fn getManagementLevel() -> ByteVec {
+        return b`Executive`
+    }
+}
+```
+
+In the example above, we defined two interfaces `Payable` and `WorkStatus`, and three abstract contracts `Employee` and `TechnicalStaff` and `ManagementStaff`. `SoftwareEngineer` contract extends `Employee` and `TechnicalStaff`, and implements `Payable` and `WorkStatus` interfaces. `Director` contract extends `Employee` and `ManagementStaff`, and implements `Payable` and `WorkStatus` interfaces.
+
+
+There are couple of restrictions for interfaces:
+- Interfaces can only have function and event declarations, but no function implementations
+- Interfaces can not have any contract fields, constants, enums or mappings
+- Interfaces can only inherit from other interfaces, not from abstract or concrete contracts
+
+Abstract contract has less restrictions compared to interfaces:
+- Abstract contracts can have both function declarations and function implementations
+- Abstract contracts can have contract fields, constants, enums and mappings
+- Abstract contracts can inherit from multiple abstract contracts and implement multiple interfaces
+
+Concrete contracts are at the bottom of the inheritance hierarchy:
+- Concrete contracts can only have implemented functions
+- Concrete contracts can have contract fields, constants, enums and mappings
+- Concrete contracts can inherit from multiple abstract contracts and implement multiple interfaces, but concrete contracts can not be inherited by other contracts
+
+There is no override mechanism in Ralph. If a concrete contract implements a function that is already implemented by one of the abstract contracts it inherits from, the compiler will report an error.
+
+You may ask why do we need interfaces if abstract contracts have less restrictions. The answer is that we can instantiate a contract using interface and concrete contract, but not with abstract contracts, as illustrated in the example below:
+
+```rust
+Contract Company() {
+    @using(checkExternalCaller = false)
+    pub fn getStatus(contractId: ByteVec) -> ByteVec {
+        return WorkStatus(contractId).status()  // OK
+    }
+
+    //@using(checkExternalCaller = false)
+    //pub fn getName(contractId: ByteVec) -> ByteVec {
+    //    return Employee(contractId).getName()  // Compiler reports "Employee" is not instantiable
+    //}
+
+    @using(checkExternalCaller = false)
+    pub fn getName(contractId: ByteVec) -> ByteVec {
+        return SoftwareEngineer(contractId).getName()  // OK
+    }
+}
+```
+
+##### Standard Interfaces
+
+Standard interfaces play an important role in the Alephium ecosystem by establishing common patterns that enable interoperability between different smart contracts, wallets, block explorers, and other applications. When contracts implement well-known standard interfaces, other contracts and applications can interact with them without needing to know their specific implementation details.
+
+For example, the fungible token standard and non-fungible token standard ensure that any wallet or marketplace can work with any token that implements these standards. A wallet only needs to understand the standard interface to be able to display token logo and balances. Similarly, a NFT marketplace contract can support trading of any NFTs that follows the non-fungible token standard interface.
+
+These standard interfaces can also improve composability between contracts. For example, a lending protocol can integrate with any oracle that implements the standard oracle interface, without requiring custom code for each oracle implementation.
+
+Standard interfaces in Alephium are defined in the Web3 SDK. They are all annotated using `@std` with a unique id, which is compiled as an implicit field for the inheriting contracts. This annotation enables wallets and dApps to automatically detect standard compliant contracts. Alephium currently supports two primary categories of standards: fungible token standard and non-fungible token standard.
+
+###### Fungible Token Standard
+
+Fungible tokens represent interchangeable units of value, where each token is identical and holds the same properties. The fungible token standard defines a common interface that token contracts must implement, including `getName`, `getSymbol`, `getDecimals`, and `getTotalSupply`.
+
+```typescript
+@std(id = #0001)
+@using(methodSelector = false)
+Interface IFungibleToken {
+  pub fn getSymbol() -> ByteVec
+  pub fn getName() -> ByteVec
+  pub fn getDecimals() -> U256
+  pub fn getTotalSupply() -> U256
+}
+```
+
+The `@std(id = #0001)` annotation indicates that the fungible token standard id is `0001`. The `@using(methodSelector = false)` annotation is used to disable method selector as the mechanism of calling the interface functions in preference to method indexes. We will cover this with more details later.
+
+Here is a concrete example of a contract that implements the fungible token standard:
+
+```rust
+import "std/fungible_token_interface"
+
+Contract ShinyToken() implements IFungibleToken {
+  pub fn getTotalSupply() -> U256 {
+      return 10000
+  }
+
+  pub fn getSymbol() -> ByteVec {
+      return b`Stk`
+  }
+
+  pub fn getName() -> ByteVec {
+      return b`ShinyToken`
+  }
+
+  pub fn getDecimals() -> U256 {
+      return 18
+  }
+}
+```
+
+To implement the `IFungibleToken` interface, we need to import it from the Web3 SDK using the `import` statement. Here is how we can interact with the `ShinyToken` contract in TypeScript:
+
+```typescript
+import { NodeProvider, stringToHex } from '@alephium/web3'
+import { getSigner } from '@alephium/web3-test'
+import { ShinyToken } from '../artifacts/ts'
+
+async function test() {
+  const nodeProvider = new NodeProvider('http://127.0.0.1:22973')
+  const signer = await getSigner()
+
+  const issueTokenAmount = 10000n
+  const shinyToken = await ShinyToken.deploy(signer, {
+    initialFields: {},
+    issueTokenAmount,
+    issueTokenTo: signer.address
+  })
+  const shinyTokenId = shinyToken.contractInstance.contractId
+
+  const signerBalance = await nodeProvider.addresses.getAddressesAddressBalance(signer.address)
+  console.assert(signerBalance.tokenBalances!.length === 1)
+  console.assert(signerBalance.tokenBalances![0].id === shinyTokenId)
+  console.assert(BigInt(signerBalance.tokenBalances![0].amount) === issueTokenAmount)
+
+  const interfaceId = await nodeProvider.guessStdInterfaceId(shinyTokenId)
+  console.assert(interfaceId === '0001')
+
+  const tokenType = await nodeProvider.guessStdTokenType(shinyTokenId)
+  console.assert(tokenType === 'fungible')
+
+  const tokenMetaData = await nodeProvider.fetchFungibleTokenMetaData(shinyTokenId)
+  console.assert(tokenMetaData.name === stringToHex('ShinyToken'))
+  console.assert(tokenMetaData.symbol === stringToHex('Stk'))
+  console.assert(tokenMetaData.decimals === 18)
+  console.assert(tokenMetaData.totalSupply === issueTokenAmount)
+}
+
+test()
+```
+
+In the example above, we deployed the `ShinyToken` contract and issued `10000` tokens to the signer's address. The `NodeProvider` class from the Web3 SDK offers utility functions like `guessStdInterfaceId` and `guessStdTokenType` that help identify a contract's implemented interfaces and token type. This helps wallets and other applications to detect that the `ShinyToken` contract is a fungible token contract, and allows them to use the `fetchFungibleTokenMetaData` function to fetch all of its metadata.
+
+###### Non-Fungible Token Standard
+
+Non-Fungible Tokens (NFTs) are unique digital assets that represent ownership of a specific piece of content. Unlike fungible tokens which are identical and interchangeable, each NFT has distinct properties that make it one-of-a-kind.
+
+In Alephium, NFT contracts are typically modeled as sub-contracts of NFT collection contracts. Alephium provides standard interfaces for both NFT and NFT collection contracts, making them easily discoverable and interoperable across wallets, marketplaces, and various decentralized applications.
+
+For NFT collections, the standard interface is `INFTCollection` with `@std` id `0002` associated with it. The `INFTCollection` interface defines the standard methods that all NFT collection contracts should implement:
+
+```rust
+import "std/nft_interface"
+
+@std(id = #0002)
+@using(methodSelector = false)
+Interface INFTCollection {
+   pub fn getCollectionUri() -> ByteVec
+   pub fn totalSupply() -> U256
+   pub fn nftByIndex(index: U256) -> INFT
+   pub fn validateNFT(nftId: ByteVec, nftIndex: U256) -> ()
+}
+```
+
+The `getCollectionUri` function returns a URI that points to a JSON file containing metadata for the NFT collection. The JSON file should conform to the following schema:
+
+```typescript
+{
+    "title": "NFT Collection Metadata",
+    "type": "object",
+    "properties": {
+        "name": {
+            "type": "string",
+            "description": "Name of the NFT collection"
+        },
+        "description": {
+            "type": "string",
+            "description": "General description of the NFT collection"
+        },
+        "image": {
+            "type": "string",
+            "description": "A URI to the image that represents the NFT collection"
+        }
+    }
+}
+```
+
+`totalSupply` function returns the total number of NFTs in the collection. `nftByIndex` function returns the NFT at the given index. `validateNFT` function validates that the given NFT is part of the collection, otherwise it should fail with an error.
+
+To support royalties for a NFT collection, a standard interface called `INFTCollectionWithRoyalty` was introduced with `@std` id `000201`.
+
+```rust
+import "std/nft_collection_interface"
+
+@std(id = #000201)
+@using(methodSelector = false)
+Interface INFTCollectionWithRoyalty extends INFTCollection {
+    pub fn royaltyAmount(tokenId: ByteVec, salePrice: U256) -> (U256)
+
+    @using(preapprovedAssets = true)
+    pub fn payRoyalty(payer: Address, amount: U256) -> ()
+
+    pub fn withdrawRoyalty(to: Address, amount: U256) -> ()
+}
+```
+
+`INFTCollectionWithRoyalty` extends `INFTCollection` with three additional functions:
+
+- `royaltyAmount`: Returns the royalty amount for a given NFT and its sale price.
+- `payRoyalty`: Pays the royalty amount from the `payer`
+- `withdrawRoyalty`: Withdraws the royalty amount to the `to` address
+
+Note that the `std` id `000201` for `INFTCollectionWithRoyalty` uses `0002` as prefix to indicate that it is an extension of `INFTCollection`.
+
+For NFT contracts, the standard interface is `INFT` with `@std` id `0003`. It defines the standard methods that all NFT contracts should implement:
+
+```rust
+@std(id = #0003)
+@using(methodSelector = false)
+Interface INFT {
+   pub fn getTokenUri() -> ByteVec
+   pub fn getCollectionIndex() -> (ByteVec, U256)
+}
+```
+
+`getTokenUri` function returns a URI that points to a JSON file containing metadata for the NFT. The JSON file should conform to the following schema:
+
+```typescript
+{
+    "title": "NFT Metadata",
+    "type": "object",
+    "properties": {
+        "name": {
+            "type": "string",
+            "description": "Name of the NFT"
+        },
+        "description": {
+            "type": "string",
+            "description": "General description of the NFT",
+            "nullable": true
+        },
+        "image": {
+            "type": "string",
+            "description": "A URI to the image that represents the NFT"
+        },
+        "attributes": {
+          "type": "array",
+          "description": "An array of attributes for the NFT",
+          "items": {
+            "type": "object",
+            "properties": {
+              "trait_type": {
+                "type": "string",
+                "description": "The type of trait"
+              },
+              "value": {
+                "type": ["string", "number", "boolean"],
+                "description": "The value of the trait"
+              }
+            }
+          },
+          "nullable": true
+        }
+    }
+}
+```
+
+`getCollectionIndex` function returns the collection id and the index of the NFT in the collection.
+
+In the following example, `AwesomeNFTCollection` is an NFT collection contract and `AwesomeNFT` is an NFT contract. Both of them conform to the standard interfaces:
+
+```rust
+import "std/nft_collection_interface"
+import "std/nft_interface"
+
+Contract AwesomeNFTCollection(
+  nftTemplateId: ByteVec,
+  collectionUri: ByteVec,
+  mut totalSupply: U256
+) implements INFTCollection {
+  enum ErrorCodes {
+    IncorrectTokenIndex = 0
+    NFTNotFound = 1
+    NFTNotPartOfCollection = 2
+  }
+
+  pub fn getCollectionUri() -> ByteVec {
+    return collectionUri
+  }
+
+  pub fn totalSupply() -> U256 {
+    return totalSupply
+  }
+
+  pub fn nftByIndex(index: U256) -> INFT {
+    checkCaller!(index < totalSupply(), ErrorCodes.IncorrectTokenIndex)
+
+    let nftTokenId = subContractId!(toByteVec!(index))
+    assert!(contractExists!(nftTokenId), ErrorCodes.NFTNotFound)
+
+    return INFT(nftTokenId)
+  }
+
+  pub fn validateNFT(nftId: ByteVec, nftIndex: U256) -> () {
+      let expectedTokenContract = nftByIndex(nftIndex)
+      assert!(nftId == contractId!(expectedTokenContract), ErrorCodes.NFTNotPartOfCollection)
+  }
+
+  @using(preapprovedAssets = true, updateFields = true, checkExternalCaller = false)
+  pub fn mint(nftUri: ByteVec) -> (ByteVec) {
+    let minter = callerAddress!()
+
+    let (initialImmState, initialMutState) = AwesomeNFT.encodeFields!(
+      selfContractId!(), totalSupply, nftUri
+    )
+
+    let contractId = copyCreateSubContractWithToken!{minter -> ALPH: minimalContractDeposit!()}(
+        toByteVec!(totalSupply),
+        nftTemplateId,
+        initialImmState,
+        initialMutState,
+        1,
+        minter
+    )
+
+    totalSupply = totalSupply + 1
+    return contractId
+  }
+}
+
+Contract AwesomeNFT(
+  collectionId: ByteVec,
+  nftIndex: U256,
+  uri: ByteVec
+) implements INFT {
+  pub fn getTokenUri() -> ByteVec {
+    return uri
+  }
+
+  pub fn getCollectionIndex() -> (ByteVec, U256) {
+    return collectionId, nftIndex
+  }
+}
+```
+
+The `AwesomeNFTCollection` contract implements the standard NFT collection interface. It stores collection metadata through a URI and tracks the total supply of NFTs in the collection. The contract uses a template contract id for `AwesomeNFT` to mint individual NFTs as sub-contracts, with each NFT having its index as sub-contract path. The sub-contract system maintains the relationship between the collection and its NFTs, allowing `AwesomeNFTCollection` contract to properly validate and retrieve NFTs within the collection using the `validateNFT` and `nftByIndex` functions.
+
+The `AwesomeNFT` contract implements the standard NFT interface. It stores NFT metadata through a URI and returns the collection id and the index of the NFT in the collection.
+
+Now let's see how to deploy and interact with the `AwesomeNFTCollection` and `AwesomeNFT` contracts using the Web3 SDK:
+
+```typescript
+import {
+  binToHex, codec, stringToHex, subContractId,
+  DUST_AMOUNT, MINIMAL_CONTRACT_DEPOSIT, NodeProvider
+} from '@alephium/web3'
+import { getSigner } from '@alephium/web3-test'
+import { AwesomeNFT, AwesomeNFTCollection } from '../artifacts/ts'
+
+async function test() {
+  const nodeProvider = new NodeProvider('http://127.0.0.1:22973')
+  const signer = await getSigner()
+
+  const { contractInstance: awesomeNFTTemplate } = await AwesomeNFT.deploy(
+    signer,
+    { initialFields: { collectionId: '', nftIndex: 0n, uri: '' } }
+  )
+
+  const collectionUri = 'https://collection-uri'
+  const { contractInstance: nftCollection } = await AwesomeNFTCollection.deploy(
+    signer,
+    {
+      initialFields: {
+        nftTemplateId: awesomeNFTTemplate.contractId,
+        collectionUri: stringToHex(collectionUri),
+        totalSupply: 0n
+      },
+    }
+  )
+
+  const collectionInterfaceId = await nodeProvider.guessStdInterfaceId(nftCollection.contractId)
+  console.assert(collectionInterfaceId === '0002')
+  const collectionMetadata = await nodeProvider.fetchNFTCollectionMetaData(nftCollection.contractId)
+  console.assert(collectionMetadata.collectionUri === collectionUri)
+  console.assert(collectionMetadata.totalSupply === 0n)
+
+  const nftUri = 'https://nft-uri/0'
+  await nftCollection.transact.mint({
+    signer,
+    args: { nftUri: stringToHex(nftUri) },
+    attoAlphAmount: MINIMAL_CONTRACT_DEPOSIT + DUST_AMOUNT
+  })
+
+  // NFT collection create NFT as a sub-contract, using index as the sub-contract path
+  // For the first NFT, the index is `0`
+  const nftSubContractPath = binToHex(codec.u256Codec.encode(0n))
+  const nftContractId = subContractId(nftCollection.contractId, nftSubContractPath, 0)
+
+  const nftInterfaceId = await nodeProvider.guessStdInterfaceId(nftContractId)
+  console.assert(nftInterfaceId === '0003')
+  const nftTokenType = await nodeProvider.guessStdTokenType(nftContractId)
+  console.assert(nftTokenType === 'non-fungible')
+
+  const nftMetadata = await nodeProvider.fetchNFTMetaData(nftContractId)
+  console.assert(nftMetadata.tokenUri === nftUri)
+  console.assert(nftMetadata.collectionId === nftCollection.contractId)
+  console.assert(nftMetadata.nftIndex === 0n)
+}
+
+test()
+```
+
+In this example, we deploy an `AwesomeNFT` template contract, then use its id to deploy the `AwesomeNFTCollection` contract. We verify it implements the standard NFT collection interface (id `0002`) using `guessStdInterfaceId`, and confirm its metadata is correctly initialized with `fetchNFTCollectionMetaData`.
+
+Next, we mint an NFT to the collection and derive its contract id using `subContractId`. We verify it implements the standard NFT interface (id `0003`), confirm its token type is `non-fungible`, and validate its metadata with `fetchNFTMetaData`.
+
