@@ -1691,3 +1691,146 @@ Contract CryptographyFunctions() {
 
 The supported hash algorithms are `blake2b`, `keccak256`, `sha256` and `sha3`. The supported signature algorithms are `secp256k1`, `ed25519` and `bip340`.
 
+### Contracts
+
+Contracts in Ralph serve as the fundamental building blocks for smart contract development. Similar to classes in object-oriented programming, contracts encapsulate state and logic in a single unit. Each contract can contain several types of declarations:
+
+- **Contract fields**: Both immutable and mutable contract state variables
+- **Events**: For emitting on-chain notifications, allowing off-chain applications to track and respond to on-chain activities
+- **Constants**: Immutable values available throughout the contract
+- **Enums**: User defined data type consisting of a fixed set of named constants
+- **Functions**: Defines executable logic and behavior of the contract
+
+Contracts are identified by their unique contract ids, which can be converted 1-to-1 to contract addresses. In Alephium, tokens are issued through contract creation, and the token id is identical to the id of the contract that issued it.
+
+```rust
+Contract MyToken(name: ByteVec, mut owner: Address) {
+    event Transfer(to: Address, amount: U256, version: U256)
+    const VERSION = 0
+    enum ErrorCodes {
+      INVALID_CALLER = 0
+    }
+
+    @using(assetsInContract = true)
+    pub fn withdraw() -> () {
+      checkCaller!(callerAddress!() == owner, ErrorCodes.INVALID_CALLER)
+      transferTokenFromSelf!(owner, selfTokenId!(), 100)
+      emit Transfer(owner, 100, VERSION)
+    }
+
+    @using(updateFields = true)
+    pub fn updateOwner(newOwner: Address) -> () {
+      checkCaller!(callerAddress!() == owner, ErrorCodes.INVALID_CALLER)
+      owner = newOwner
+    }
+
+    pub fn getName() -> ByteVec {
+      return name
+    }
+}
+```
+
+In the `MyToken` contract, we define an immutable field `name`, a mutable field `owner`, an event `Transfer`, a constant `VERSION`, and an enum `ErrorCodes`.
+
+The `withdraw` function allows the owner to withdraw tokens from the contract. It makes sure that the caller is the owner, otherwise fails with `INVALID_CALLER` error. It then transfers 100 tokens from the contract to the owner and emits a `Transfer` event.
+
+In the following example, we demonstrate how to deploy and interact with `MyToken` contract:
+
+```typescript
+import {
+    addressFromContractId, binToHex, contractIdFromAddress, stringToHex, sleep,
+    NodeProvider, DUST_AMOUNT
+ } from '@alephium/web3'
+import { getSigner } from '@alephium/web3-test'
+import { MyToken, MyTokenTypes } from '../artifacts/ts'
+
+async function test() {
+  const nodeProvider = new NodeProvider("http://localhost:22973")
+  const signer = await getSigner()
+
+  const { contractInstance: myToken } = await MyToken.deploy(
+    signer, {
+     initialFields: { name: stringToHex("MyToken"), owner: signer.address },
+     issueTokenAmount: 1000n
+  })
+
+  console.assert(myToken.address === addressFromContractId(myToken.contractId))
+  console.assert(binToHex(contractIdFromAddress(myToken.address)) === myToken.contractId)
+  const myTokenId = myToken.contractId
+
+  async function getTokenBalance(address: string, tokenId: string) {
+    const balance = await nodeProvider.addresses.getAddressesAddressBalance(address)
+    console.assert(balance.tokenBalances?.[0].id === tokenId)
+    return balance.tokenBalances?.[0].amount
+  }
+
+  console.assert(await getTokenBalance(myToken.address, myTokenId) === "1000")
+
+  const { returns: name } = await myToken.view.getName()
+  console.assert(name === stringToHex("MyToken"))
+
+  await myToken.transact.withdraw({ signer, attoAlphAmount: DUST_AMOUNT })
+  console.assert(await getTokenBalance(myToken.address, myTokenId) === "900")
+  console.assert(await getTokenBalance(signer.address, myTokenId) === "100")
+
+  let transferEvent: MyTokenTypes.TransferEvent | undefined
+  myToken.subscribeTransferEvent({
+    messageCallback: (event) => {
+      transferEvent = event
+    },
+    errorCallback: (error) => {
+      console.error(error)
+    },
+    pollingInterval: 500
+  })
+
+  await sleep(1000)
+  console.assert(transferEvent?.contractAddress === myToken.address, "xx")
+  console.assert(transferEvent?.fields.amount === 100n, "yy")
+  console.assert(transferEvent?.fields.to === signer.address, "zz")
+  console.assert(transferEvent?.fields.version === 0n, "vv")
+
+  process.exit(0)
+}
+
+test()
+```
+
+In the example above, first we deployed the `MyToken` contract and issued `1000` tokens to itself. We then used the `addressFromContractId` and `contractIdFromAddress` functions from the Web3 SDK to verify that the contract address and contract id is 1-to-1 convertible, and the issued token id is the same as the contract id.
+
+To call a read-only function, we use the `view` property of the contract instance, as shown by `myToken.view.getName()`. View functions query contract data without requiring gas fees.
+
+To call a function that updates the contract fields or transfer assets, we need to start a transaction by using the `transact` property of the contract instance, as shown by `myToken.transact.withdraw()`. This will require the caller to pay gas fees. After the transaction is submitted, we verify that the balance for token balance for the owner and the contract are updated as expected.
+
+Finally, we demonstrate event handling capabilities. Since the `withdraw` function emits a `Transfer` event, we can subscribe to and verify these events. The Web3 SDK automatically generates event-specific subscription methods, in this case `subscribeTransferEvent`, for each event type defined in the contract. After waiting briefly to allow block confirmation, we verify that the emitted event contains the expected data by checking the event fields like contract address, transfer amount, recipient address and version number. This shows how on-chain events can be tracked and handled in off-chain applications.
+
+There are several built-in functions that can be used to create contracts in Ralph. For more details please refer to the bulit-in [Contract Functions](#contract-functions) section.
+
+#### Sub Contracts
+
+Sub contracts on Alephium provide a simple yet powerful mechanism for organizing related contracts. They enable developers to construct tree-like structures of contracts that can be traversed similar to navigating through domain names. Each sub-contract is a fully functional contract that can maintain its own state, issue tokens, and implement complex business logic, which makes it more powerful than traditional tree or map data structures.
+
+Like regular contracts, sub-contracts require a deposit that gets returned when destroyed. This incentivizes recycling unused sub-contracts to prevent state bloat. Alephium's maps leverage this same sub-contract system and inherit these properties.
+
+The key to understand the sub-contracts system lies in how contract ids are constructed. For regular contracts, the contract id is derived by combining the transaction id that created the contract, the index of the contract creation output within that transaction, and the contract's group number using the following formula:
+
+```
+contractId = dropRight(blake2b(txId || output index), 1) || group number
+```
+
+The transaction id and the output index are concatenated and hashed using the `Blake2b` hash function. The last byte of the hash is then replaced with the group number to get the final contract id.
+
+For sub-contracts, the contract id is derived by the parent contract's id and a unique `ByteVec` path value that identifies the sub-contract under its parent. This ensures that each sub-contract has a globally unique identifier as well.
+
+```
+subContractId = dropRight(blake2b(blake2b(parentContractId || subContractPath)), 1) || group number
+```
+
+The parent contract's id and the sub-contract's path value are concatenated and double hashed using the `Blake2b` hash function. The last byte of the hash is also replaced with the group number to get the final sub contract id. This embedded group number for both regular and sub-contracts makes it possible for the `groupOfAddress` function in Ralph and Web3 SDK to determine a contract's group number from its address.
+
+The way that the sub-contract id is constructed allows easy navigation from parent to child contracts. Both Ralph and the Web3 SDK provide functions like `subContractId` and `subContractIdOf` to derive sub-contract ids from parent contract ids and path values.
+
+Sub-contracts provide a powerful abstraction for building complex smart contract systems. For example, an NFT collection can be implemented as a parent contract with individual NFTs as sub-contracts using the NFT's index as the path value. This design enables easy navigation between collection and specific NFTs, and allows each NFT to manage its state and asset independently. Similarly, a DEX can organize token pools as sub-contracts with token ids from the token pair as path values, this approach allows each pool to maintain its own state and assets while remaining discoverable through the main DEX contract. Well-designed smart contracts using sub-contracts create modular, maintainable systems with clear responsibilities.
+
+Please refer to the built-in [Sub-contracts Functions](#sub-contract-functions) section for a concrete example of how to create and interact with sub-contracts.
+
