@@ -2831,3 +2831,326 @@ After executing the `TxScript`, the final transaction will produce the following
 
 In a sophisticated dApp transaction, Asset Permission System ensures that the flow of assets within the complex method call graph is explicit and controlled. It enforces constraints on each method regarding which tokens and how much of them can be accessed. Together with the UTXO model, it offers an asset management solution that is simple, flexible and secure.
 
+## Testing and Debugging
+
+Testing is essential to ensure the functionality, quality and security of any software products. This is especially true when it comes to smart contracts development because once deployed, smart contracts are much more difficult, if possible, to update compared to traditional software, and bugs in them can potentially lead to significant financial losses.
+
+Testing smart contracts can be challenging. Alephium's Web3 SDK makes the following opinionated design decisions when it comes to its testing framework:
+
+- Both unit tests and integration tests are important. Although the distinction between them can be blurry, the test framework defines integration tests as the tests that require smart contracts under test to be deployed, whereas unit tests do not
+- Test code should be clean and maintainable, just like any other code. The Web3 SDK automatically generates testing boilerplates to simplify the process of writing and maintaining test cases
+- Tests are executed against the Alephium full node in devnet, which shares the same codebase as the Alephium mainnet. This ensures that the tests are mostly run under realistic conditions
+
+Ralph also allows developers to emit debug statements within smart contracts, which is very useful to diagnose issues during development.
+
+### Unit Test
+
+A unit test tests a specific function of a contract, without requiring the contract to be deployed. Let's use the following contract as an example:
+
+```rust
+Contract ALPHFaucet(mut withdrawAmount: U256, mut alphRemaining: U256) {
+    event WithdrawAmountUpdated(previous: U256, new: U256)
+    event Withdraw(amount: U256, by: Address)
+
+    @using(checkExternalCaller = false)
+    pub fn increaseWithdrawAmount(value: U256) -> U256 {
+        return updateWithdrawAmount(withdrawAmount + value)
+    }
+
+    @using(checkExternalCaller = false)
+    pub fn decreaseWithdrawAmount(value: U256) -> U256 {
+        return updateWithdrawAmount(withdrawAmount - value)
+    }
+
+    @using(updateFields = true)
+    fn updateWithdrawAmount(value: U256) -> U256 {
+        emit WithdrawAmountUpdated(withdrawAmount, value)
+        withdrawAmount = value
+        return value
+    }
+
+    @using(checkExternalCaller = false, assetsInContract = true, updateFields = true)
+    pub fn withdraw() -> () {
+        transferTokenFromSelf!(callerAddress!(), ALPH, withdrawAmount)
+        alphRemaining = alphRemaining - withdrawAmount
+        emit Withdraw(withdrawAmount, callerAddress!())
+    }
+}
+```
+
+The `ALPHFaucet` contract allows caller to withdraw `withdrawAmount` amount of ALPHs. `withdrawAmount` can be adjusted by calling the `increaseWithdrawAmount` and `decreaseWithdrawAmount` functions.
+
+We can write the following code to unit test the `increaseWithdrawAmount` function:
+
+```typescript
+const result = await ALPHFaucet.tests.increaseWithdrawAmount({
+  initialFields: { withdrawAmount: 10n, alphRemaining: 100n },
+  testArgs: { value: 10n }
+})
+expect(result.returns).toBe(20n)
+expect(result.events[0].name).toEqual('WithdrawAmountUpdated')
+expect(result.events[0].fields).toEqual({previous: 10n, new: 20n})
+expect(result.contracts[0].fields.withdrawAmount).toEqual(20n)
+expect(result.contracts[0].fields.alphRemaining).toEqual(100n)
+```
+
+To test the `increaseWithdrawAmount` function, we need to set up the initial fields for the `ALPHFaucet` contract. In this case, `withdrawAmount` is set to `10n` and `alphRemaining` is set to `100n`. The `testArgs` field is used to pass in the `value` argument for the `increaseWithdrawAmount` function (`10n`). After executing the function, we can verify that `increaseWithdrawAmount` function returns the correct value, `withdrawAmount` field is updated properly, and `WithdrawAmountUpdated` event is emitted with the right fields as well.
+
+Next, let's test the `withdraw` function:
+
+```typescript
+const result = await ALPHFaucet.tests.withdraw({
+  initialFields: { withdrawAmount: ONE_ALPH, alphRemaining: ONE_ALPH * 100n },
+  initialAsset: { alphAmount: ONE_ALPH * 100n },
+  inputAssets: [{ address: testAddress, asset: { alphAmount: ONE_ALPH / 2n } }]
+})
+
+expect(result.returns).toBe(null)
+expect(result.events[0].name).toEqual('Withdraw')
+expect(result.events[0].fields).toEqual({amount: ONE_ALPH, by: testAddress})
+expect(result.txOutputs[0].address).toEqual(testAddress)
+expect(result.txOutputs[0].alphAmount).toEqual(ONE_ALPH)
+expect(result.contracts[0].fields.withdrawAmount).toEqual(ONE_ALPH)
+expect(result.contracts[0].fields.alphRemaining).toEqual(ONE_ALPH * 99n)
+```
+
+We set up the initial fields for the `ALPHFaucet` contract using the `initialFields` field and assign it an initial asset of `100` ALPH using the `initialAsset` field. Additionally, we configure the transaction inputs with the `inputAssets` field, where the first input asset always belongs to the caller's address. After executing the function, we can verify that the `withdraw` function returns the correct value (`null`), contract fields for `ALPHFaucet` are updated properly, `Withdraw` event is emitted with the right fields, and the caller's address receives the correct amount of ALPH.
+
+The unit test framework in Web3 SDK also supports the scenario where the function under test calls an external contract function. Let's modify the `ALPHFaucet` contract to have `withdrawAmount` stored in another contract:
+
+```rust
+Contract ALPHFaucet(withdrawAmount: WithdrawAmount, mut alphRemaining: U256) {
+    event Withdraw(amount: U256, by: Address)
+
+    @using(checkExternalCaller = false)
+    pub fn increaseWithdrawAmount(value: U256) -> U256 {
+        return withdrawAmount.update(withdrawAmount.get() + value)
+    }
+
+    @using(checkExternalCaller = false)
+    pub fn decreaseWithdrawAmount(value: U256) -> U256 {
+        return withdrawAmount.update(withdrawAmount.get() - value)
+    }
+
+    @using(checkExternalCaller = false, assetsInContract = true, updateFields = true)
+    pub fn withdraw() -> () {
+        let amount = withdrawAmount.get()
+        transferTokenFromSelf!(callerAddress!(), ALPH, amount)
+        alphRemaining = alphRemaining - amount
+        emit Withdraw(amount, callerAddress!())
+    }
+}
+
+Contract WithdrawAmount(mut value: U256) {
+    event WithdrawAmountUpdated(previous: U256, new: U256)
+
+    @using(updateFields = true, checkExternalCaller = false)
+    pub fn update(newValue: U256) -> U256 {
+        emit WithdrawAmountUpdated(value, newValue)
+        value = newValue
+        return value
+    }
+
+    pub fn get() -> U256 {
+        return value
+    }
+}
+```
+
+To test the `increaseWithdrawAmount` function in the `ALPHFaucet` contract, we begin by creating the initial state for `WithdrawAmount` contract using the `stateForTest` method and set it up as a dependency for the test using the `existingContracts` field. We also use the contract id for `WithdrawAmount` to initialize the fields for the `ALPHFaucet` contract.
+
+```typescript
+const withdrawAmount = WithdrawAmount.stateForTest({value: ONE_ALPH})
+const result = await ALPHFaucet.tests.increaseWithdrawAmount({
+  initialFields: { withdrawAmount: withdrawAmount.contractId, alphRemaining: ONE_ALPH * 100n },
+  testArgs: { value: ONE_ALPH },
+  existingContracts: [withdrawAmount]
+})
+expect(result.returns).toBe(ONE_ALPH * 2n)
+expect(result.events[0].name).toEqual('WithdrawAmountUpdated')
+expect(result.events[0].fields).toEqual({previous: ONE_ALPH, new: ONE_ALPH * 2n})
+expect(result.contracts[0].fields.value).toEqual(ONE_ALPH * 2n)
+expect(result.contracts[1].fields.withdrawAmount).toEqual(withdrawAmount.contractId)
+expect(result.contracts[1].fields.alphRemaining).toEqual(ONE_ALPH * 100n)
+```
+
+After executing the `increaseWithdrawAmount` function, we can verify that the fields in both the `ALPHFaucet` and `WithdrawAmount` contracts are updated properly.
+
+The Web3 SDK also supports testing functions that use maps. Let's update the `ALPHFaucet` contract to include a map, ensuring that each caller can only withdraw once:
+
+```rust
+Contract ALPHFaucet(withdrawAmount: U256, mut alphRemaining: U256) {
+    mapping[Address, U256] alreadyWithdrawn
+    event Withdraw(amount: U256, by: Address)
+    enum ErrorCodes {
+        AlreadyWithdrawn = 0
+    }
+
+    @using(
+        preapprovedAssets = true,
+        checkExternalCaller = false,
+        assetsInContract = true,
+        updateFields = true
+    )
+    pub fn withdraw() -> () {
+        let caller = callerAddress!()
+        assert!(!alreadyWithdrawn.contains!(caller), ErrorCodes.AlreadyWithdrawn)
+
+        alreadyWithdrawn.insert!(caller, caller, withdrawAmount)
+        transferTokenFromSelf!(caller, ALPH, withdrawAmount)
+
+        alphRemaining = alphRemaining - withdrawAmount
+        emit Withdraw(withdrawAmount, caller)
+    }
+}
+```
+
+As we can see from the code, the `withdraw` function now uses the `alreadyWithdrawn` map to ensure that each caller can only withdraw once, otherwise the transaction will fail with the `AlreadyWithdrawn` error code.
+
+To test the `withdraw` function, we can write the following code:
+
+```typescript
+const result = await ALPHFaucet.tests.withdraw({
+  initialMaps: { alreadyWithdrawn: new Map([]) },
+  initialFields: { withdrawAmount: ONE_ALPH, alphRemaining: ONE_ALPH * 100n },
+  initialAsset: { alphAmount: ONE_ALPH * 100n },
+  inputAssets: [{ address: testAddress, asset: { alphAmount: ONE_ALPH * 2n } }]
+})
+expect(result.returns).toBe(null)
+expect(result.events[0].name).toEqual('ContractCreated')
+expect(result.events[1].name).toEqual('Withdraw')
+expect(result.events[1].fields).toEqual({amount: ONE_ALPH, by: testAddress})
+expect(result.contracts[0].fields.withdrawAmount).toEqual(ONE_ALPH)
+expect(result.contracts[0].fields.alphRemaining).toEqual(ONE_ALPH * 99n)
+```
+
+Note that we use the `initialMaps` field to set up an empty value for the `alreadyWithdrawn` map. We also get an extra `ContractCreated` event because each map entry is created as a sub-contract under the hood.
+
+We can also use the `expectAssertionError` method to verify that the `withdraw` function fails when the caller has already withdrawn:
+
+```typescript
+const contractAddress = randomContractAddress()
+expectAssertionError(
+  ALPHFaucet.tests.withdraw({
+    address: contractAddress,
+    initialMaps: { alreadyWithdrawn: new Map([[testAddress, ONE_ALPH]]) },
+    initialFields: { withdrawAmount: ONE_ALPH, alphRemaining: ONE_ALPH * 100n },
+    initialAsset: { alphAmount: ONE_ALPH * 100n },
+    inputAssets: [{ address: testAddress, asset: { alphAmount: ONE_ALPH * 2n } }]
+  }),
+  contractAddress,
+  0
+)
+```
+
+`expectAssertionError` function takes three arguments: the execution promise, the address of the contract where the error is expected to be thrown, and the error code.
+
+### Integration Test
+
+An integration test tests a feature of a set of deployed contracts. Let's try to test the `ALPHFaucet` contract from the [Unit Test](#unit-test) section:
+
+```rust
+Contract ALPHFaucet(withdrawAmount: WithdrawAmount, mut alphRemaining: U256) {
+    event Withdraw(amount: U256, by: Address)
+
+    @using(checkExternalCaller = false)
+    pub fn increaseWithdrawAmount(value: U256) -> U256 {
+        return withdrawAmount.update(withdrawAmount.get() + value)
+    }
+
+    @using(checkExternalCaller = false)
+    pub fn decreaseWithdrawAmount(value: U256) -> U256 {
+        return withdrawAmount.update(withdrawAmount.get() - value)
+    }
+
+    @using(checkExternalCaller = false, assetsInContract = true, updateFields = true)
+    pub fn withdraw() -> () {
+        let amount = withdrawAmount.get()
+        transferTokenFromSelf!(callerAddress!(), ALPH, amount)
+        alphRemaining = alphRemaining - amount
+        emit Withdraw(amount, callerAddress!())
+    }
+}
+
+Contract WithdrawAmount(mut value: U256) {
+    event WithdrawAmountUpdated(previous: U256, new: U256)
+
+    @using(updateFields = true, checkExternalCaller = false)
+    pub fn update(newValue: U256) -> U256 {
+        emit WithdrawAmountUpdated(value, newValue)
+        value = newValue
+        return value
+    }
+
+    pub fn get() -> U256 {
+        return value
+    }
+}
+```
+
+`ALPHFaucet` contract uses the `WithdrawAmount` contract to store withdraw amount, so we need to deploy both of them first in the integration tests, and then verify the contract functions work as intended.
+
+```typescript
+// Helper function to get the ALPH balance of an address
+async function getAlphBalance(address: string) {
+  const result = await nodeProvider.addresses.getAddressesAddressBalance(address)
+  return BigInt(result.balance)
+}
+
+// Helper function to calculate the gas fee
+function getGasFee({gasAmount, gasPrice}: {gasAmount: number, gasPrice: Number256}) {
+  return BigInt(gasAmount) * BigInt(gasPrice)
+}
+
+const signer = await getSigner(ONE_ALPH * 1000n, 0)
+
+const {contractInstance: withdrawAmount} = await WithdrawAmount.deploy(signer, {
+  initialFields: {value: ONE_ALPH}
+})
+const {contractInstance: alphFaucet} = await ALPHFaucet.deploy(signer, {
+  initialFields: {
+     withdrawAmount: withdrawAmount.contractId,
+     alphRemaining: ONE_ALPH * 100n
+  },
+  initialAttoAlphAmount: ONE_ALPH * 100n + MINIMAL_CONTRACT_DEPOSIT
+})
+
+const initialSignerBalance = await getAlphBalance(signer.address)
+
+const tx1 = await alphFaucet.transact.withdraw({ signer })
+let expectedSignerBalance = initialSignerBalance + ONE_ALPH - getGasFee(tx1)
+expect(await getAlphBalance(signer.address)).toBe(expectedSignerBalance)
+
+const tx2 = await alphFaucet.transact.increaseWithdrawAmount({
+   signer, args: { value: ONE_ALPH * 10n } }
+)
+const tx3 = await alphFaucet.transact.withdraw({ signer })
+expectedSignerBalance = expectedSignerBalance + ONE_ALPH * 11n - getGasFee(tx2) - getGasFee(tx3)
+expect(await getAlphBalance(signer.address)).toBe(expectedSignerBalance)
+```
+
+After deploying the `ALPHFaucet` and `WithdrawAmount` contracts, we test the `withdraw` function by calling it with the signer and verifying that the signer's ALPH balance updates correctly. We then update the `withdrawAmount` and test the `withdraw` function again to ensure the new withdraw amount is applied. Note that when calculating the expected signer's ALPH balance, we account for the gas fee by subtracting it from the expected balance.
+
+### Debugging
+
+Ralph supports debug statements in smart contracts. Printing debug messages has the same syntax as emitting [contract events](#contract-events). Debug statements support string interpolation for easier inspection.
+
+```rust
+Contract Math() {
+    @using(checkExternalCaller = false)
+    pub fn add(x: U256, y: U256) -> U256 {
+        emit Debug(`${x} + ${y} = ${x + y}`)
+        return x + y
+    }
+}
+```
+
+In the example above, the `add` function in the `Math` contract is a [view function](#view-functions). When we call the `add` function in a unit test or integration test, a debug message will be printed in both the terminal console and the full node log in the following format:
+
+```bash
+# Your contract address should be different
+> Contract @ vrcKqNuMrGpA32eUgUvAB3HBfkN4eycM5uvXukwn5SxP - 1 + 2 = 3
+```
+
+If the `add` function is a [transact function](#transact-functions) which requires a transaction to be executed, the debug message will only appear in the full node log during integration tests, as the execution is asynchronous and cannot return results to the terminal console immediately. However, in unit tests, debug messages will still be printed in both the terminal console and the full node log.
+
