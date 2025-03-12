@@ -2312,3 +2312,298 @@ In this example, we deploy an `AwesomeNFT` template contract, then use its id to
 
 Next, we mint an NFT to the collection and derive its contract id using `subContractId`. We verify it implements the standard NFT interface (id `0003`), confirm its token type is `non-fungible`, and validate its metadata with `fetchNFTMetaData`.
 
+
+#### Interact with Contracts
+
+Interactions with deployed contracts can be divided into two categories based on their effects and execution model:
+
+- **Views**: These are read-only operations that query contract state. They:
+   - Execute immediately when called
+   - Don't require gas fees
+   - Return results directly to the caller
+   - Never modify blockchain state or transfer assets
+
+- **Transactions**: These operations modify contract state, transfer assets, or both. They:
+   - Require gas fees for execution
+   - Are executed only when transactions are mined on the blockchain
+   - Return only the transaction id to the caller
+
+Interacting with contracts directly through the full node API can be tedious and error-prone. The Web3 SDK simplifies this process by automatically generating wrapper code for contracts and transaction scripts. This generated code provides intellisense support in modern IDEs, handles parameter encoding/decoding, and manages the complexities of contract interactions, allowing developers to focus on building their applications rather than dealing with low-level implementation details.
+
+Let's demonstrate the usefulness of the Web3 SDK by interacting with the `MyToken` contract:
+
+```rust
+Contract MyToken(name: ByteVec, owner: Address) {
+    enum ErrorCodes {
+      INVALID_CALLER = 0
+    }
+
+    @using(assetsInContract = true)
+    pub fn withdraw() -> () {
+      checkCaller!(callerAddress!() == owner, ErrorCodes.INVALID_CALLER)
+      transferTokenFromSelf!(owner, selfTokenId!(), 100)
+    }
+
+    pub fn getName() -> ByteVec {
+      return name
+    }
+
+    pub fn getOwner() -> Address {
+      return owner
+    }
+}
+```
+
+Assuming that we have deployed the `MyToken` contract and issued 100 tokens to the contract:
+
+```typescript
+import { stringToHex, NodeProvider, DUST_AMOUNT } from '@alephium/web3'
+import { getSigner } from '@alephium/web3-test'
+import { MyToken } from '../artifacts/ts'
+
+async function test() {
+  const nodeProvider = new NodeProvider("http://localhost:22973")
+  const signer = await getSigner()
+
+  const { contractInstance: myToken } = await MyToken.deploy(
+    signer, {
+     initialFields: { name: stringToHex("MyToken"), owner: signer.address },
+     issueTokenAmount: 1000n
+  })
+}
+
+test()
+```
+
+##### View Functions
+
+Web3 SDK generates the read-only `view` methods for all functions in the `MyToken` contract. We can call the `getName` function to get the name of the token and it would return the name to the caller directly:
+
+```typescript
+const { returns: name } = await myToken.view.getName()
+console.assert(name === stringToHex("MyToken"))
+
+const { returns: owner } = await myToken.view.getOwner()
+console.assert(owner === signer.address)
+```
+
+Web3 SDK also generates code for calling multiple view functions at the same time, reducing the number of network requests:
+
+```typescript
+const results = await myToken.multicall({
+  getName: {},
+  getOwner: {}
+})
+
+console.assert(results.getName.returns === stringToHex("MyToken"))
+console.assert(results.getOwner.returns === signer.address)
+```
+
+##### Transct Functions
+
+Web3 SDK also generates the `transact` methods for all functions in the `MyToken` contract. We can call the `withdraw` function to withdraw `100` tokens using the `signer` account:
+
+```typescript
+async function getTokenBalance(address: string) {
+  const balance = await nodeProvider.addresses.getAddressesAddressBalance(address)
+  console.assert(balance.tokenBalances?.[0].id === myTokenId)
+  return balance.tokenBalances?.[0].amount
+}
+
+console.assert(await getTokenBalance(myToken.address) === "1000")
+const result = await myToken.transact.withdraw({ signer, attoAlphAmount: DUST_AMOUNT })
+console.log('transaction id', result.txId)
+
+console.assert(await getTokenBalance(myToken.address) === "900")
+console.assert(await getTokenBalance(signer.address) === "100")
+```
+
+We define a helper function `getTokenBalance` to get the balance of `MyToken` for a given address. Then we call the `myToken.transact.withdraw` function to withdraw `100` of `MyToken` for the signer. After the transaction is executed, we verify the balance of `MyToken` for the token contract and the `signer` address are updated correctly.
+
+Note that the `myToken.transact.withdraw` function doesn't return the result immediately, instead it returns the transaction information such as transaction id, gas used, unsigned transaction, and signature, etc. The execution only takes effect after the transaction is successfully mined on the blockchain.
+
+##### Transaction Scripts
+
+Stateful UTXO model enables two types of transactions on Alephium:
+
+- Asset transfer from senders to the recipients where only UTXOs are involved.
+- Smart contract interactions
+
+Transaction with smart contract interactions needs to be initiated by transaction script (`TxScript`), which is a unique and powerful feature on Alephium. `TxScript` allows developers to write re-usable or one-off logic that can compose multiple contract calls into a single transaction, without the overhead and cost of deploying new aggregation contracts. `TxScript` is also expressive and secure because it can leverage the full power of Ralph language and Alphred VM.
+
+As an example, following is the pseudo code of a TxScript that uses two DEXes to (naively) figure out the average exchange rate of USD to ALPH, and then donate $100 worth of ALPH to a charity:
+
+```rust
+TxScript Donate(dex1: Dex, dex2: Dex, charity: Charity) {
+  let rate1  = dex1.exchangeRateOfUSDToALPH()
+  let rate2  = dex2.exchangeRateOfUSDToALPH()
+  let amount = 100 / ((rate1 + rate2) / 2)
+  charity.donate{donor -> ALPH: amount}(amount)
+}
+```
+
+To call the `withdraw` function of the `MyToken` contract, we can also create a `TxScript` for it:
+
+```rust
+TxScript Withdraw(myToken: MyToken) {
+  @using(preapprovedAssets = true)
+  pub fn main() -> () {
+    myToken.withdraw()
+  }
+}
+```
+
+After compilation, Web3 SDK will generate a corresponding `Withdraw` TxScript class for this `TxScript`, which can be executed by calling its `execute` function:
+
+```typescript
+const withdrawResult = await Withdraw.execute(signer, {
+  initialFields: {
+    myToken: myToken.contractId
+  },
+  attoAlphAmount: DUST_AMOUNT
+})
+console.log('withdraw script', withdrawResult.txId)
+console.assert(await getTokenBalance(myToken.address) === "800")
+console.assert(await getTokenBalance(signer.address) === "200")
+```
+
+The `main` function can become implicit if it has no return value and special annotations. So the `Withdraw` `TxScript` can be simplified as:
+
+```rust
+TxScript Withdraw(myToken: MyToken) {
+  myToken.withdraw()
+}
+```
+
+For simple `TxScript` that only calls a single contract function, Web3 SDK provides a convenient shortcut through the `transact` method. This method automatically generates the necessary `TxScript` bytecode behind the scenes, eliminating the need to manually create and execute transaction scripts for basic contract interactions. So executing the `Withdraw` `TxScript` is equivalent to calling `myToken.transact.withdraw(...)`.
+
+#### Events
+
+Events are immutable, verifiable objects emitted by the smart contracts, stored and served by the Alephium full node. They play a critical role in facilitating efficient and transparent communication between smart contracts and off-chain applications.
+
+There are many use cases for events: DEX can use events to keep track of all the swaps happening in a token pair. NFT marketplace can use events to store all the NFT listings. Oracle can use events to signal requests of certain offchain info from smart contracts. Bridge can use events to represent certain actions that require consensus from all the bridge operators, etc.
+
+
+##### Event Object
+An event object in Alephium consists of the following attributes:
+
+| Field            | Description                                                                           |
+|------------------|---------------------------------------------------------------------------------------|
+| txId             | transaction id                                                                        |
+| blockHash        | block hash                                                                            |
+| contractAddress  | address of the contract where the event is emitted / special address for system events|
+| eventIndex       | index of the event emitted from the contract / special index for system events        |
+| fields           | fields contained in the event                                                         |
+
+There are two types of events in Alephium: contract events and system events. The following sections discuss them respectively, with more details on the contractAddress, eventIndex and fields attributes.
+
+##### Contract Events
+
+As suggested by the name, contract events are custom events emitted by the contracts:
+
+```rust
+Contract Admin(mut admin: Address) {
+  event AdminUpdated(previous: Address, new: Address)
+
+  @using(updateFields = true)
+  pub fn updateAdmin(newAdmin: Address) -> () {
+      checkCaller!(callerAddress!() == admin, 0)
+
+      admin = newAdmin
+      emit AdminUpdated(admin, newAdmin)
+  }
+}
+```
+
+In this example, an `AdminUpdated` event is emitted every time admin is updated. This information can be listened to by the off-chain applications to update their user interfaces or for auditing.
+
+You can subscribe to all events emitted from a contract, or a specific event emitted from a contract using Web3 SDK:
+
+```typescript
+// `adminInstance` is a contract instance of the Admin contract
+adminInstance.subscribeAdminUpdatedEvent({
+  pollingInterval: 500,
+  messageCallback: (event: AdminTypes.AdminUpdatedEvent): Promise<void> => {
+    console.log('got admin updated event:', event)
+    return Promise.resolve()
+  },
+  errorCallback: (error: any, subscription): Promise<void> => {
+    console.log(error)
+    subscription.unsubscribe()
+    return Promise.resolve()
+  }
+})
+```
+
+In AdminUpdated's event object, contractAddress represents the contract address of adminInstance, eventIndex is 0 since AdminUpdated is the first event defined in the Admin contract (0-based index). fields contains two addresses: one for the previous admin, the other for the new admin.
+
+##### System Events
+
+Compared to the contract events, which are emitted explicitly from the contracts, system events are emitted automatically by the Alephium full node. Currently there are two system events:
+
+###### ContractCreatedEvent
+
+`ContractCreatedEvent` is emitted when a new contract is created:
+
+```rust
+TxScript Deploy(fooByteCode: ByteVec) {
+  createContract!{callerAddress!() -> ALPH: 1 ALPH}(fooByteCode, #00, #00)
+}
+```
+
+In the example above, the Deploy transaction script creates a new Foo contract from its contract bytecode. Foo contract has no contract fields, which is why #00 is passed in as arguments to the createContract function. A ContractCreatedEvent system event is emitted after the Foo contract is created.
+
+Web3 SDK provides a helper function to subscribe to the `ContractCreatedEvent` event:
+
+```typescript
+subscribeContractCreatedEvent({
+  pollingInterval: 500,
+  messageCallback: (event: ContractCreatedEvent): Promise<void> => {
+    console.log('got contract created event:', event)
+    return Promise.resolve()
+  },
+  errorCallback: (error: any, subscription): Promise<void> => {
+    console.log(error)
+    subscription.unsubscribe()
+    return Promise.resolve()
+  }
+})
+```
+
+In `ContractCreatedEvent`'s event object, eventIndex is set to `-1`, a value specifically set aside for the `ContractCreatedEvent` event. contractAddress is set to a special value calculated based on the eventIndex and contract group. fields contains the address of the newly created contract as well as its parent contract id if it exists.
+
+
+###### ContractDestroyedEvent
+
+`ContractDestroyedEvent` is emitted when a contract is destroyed:
+
+```rust
+Contract Foo() {
+  @using(assetsInContract = true)
+  pub fn destroy() -> () {
+    destroySelf!(callerAddress!())
+  }
+}
+```
+
+In the example above, after the `destroy` function is called, `Foo` contract will be destroyed and a `ContractDestroyedEvent` system event will be emitted by the Alephium full node.
+
+Web3 SDK provides a helper function to subscribe to the `ContractDestroyedEvent` event:
+
+```typescript
+subscribeContractDestroyedEvent({
+  pollingInterval: 500,
+  messageCallback: (event: ContractDestroyedEvent): Promise<void> => {
+    console.log('got contract destroyed event:', event)
+    return Promise.resolve()
+  },
+  errorCallback: (error: any, subscription): Promise<void> => {
+    console.log(error)
+    subscription.unsubscribe()
+    return Promise.resolve()
+  }
+})
+```
+
+In `ContractDestroyedEvent`'s event object, eventIndex is set to `-2`, a value specifically allocated for the `ContractDestroyedEvent` event. `contractAddress` is set to a special value calculated based on the eventIndex and contract group. `fields` contains the address of the destroyed contract.
+
