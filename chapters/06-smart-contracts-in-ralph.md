@@ -2632,3 +2632,202 @@ subscribeContractDestroyedEvent({
 
 In the `ContractDestroyedEvent` event object, `eventIndex` is set to `-2` (a special reserved value for this system event), `contractAddress` is a unique and deterministic value calculated from the contract group and event index, and `fields` contains the address of the destroyed contract.
 
+## Asset Management
+
+Alephium's stateful UTXO model combines the advantages of the UTXO and account models. It supports the Ethereum style mutable states for smart contracts, while leveraging the security benefits of the immutable UTXO model for assets, like those found in Bitcoin.
+
+This hybrid approach has several important implications. For simple transactions that only involve asset transfers, they are handled by the UTXO model, which is battle tested for its security in managing assets. For smart contract transactions that involves asset transfers, Alephium's Asset Permission System (APS) is invented to ensure that all movements of assets within smart contracts are explicit, intentional, and secure.
+
+### Tokens
+
+Tokens are first class citizens in Alephium. Just like the native token ALPH, all tokens on Alephium are managed by UTXOs, which is battle tested for its security in managing assets.
+
+This design has many advantages compared to other blockchains:
+
+- **True Ownership**: Tokens are securely managed by UTXOs, which are directly owned by addresses. Since UTXOs are protected by users' private keys, even if there are bugs in the token contract, users' assets remain safe.
+- **Discoverability**: Tokens are native assets on Alephium, therefore both fungible and non-fungible tokens can be easily discovered and displayed by wallets, explorers, and dApps without relying on third-party services.
+- **Better UX and Security**: When smart contracts need to transfer tokens, no extra approval transactions are required since the approval is implicit in the UTXO model.
+- **Scalable**: Token transfer is very scalable because they can take full advantage of Alephium's sharding design, which means higher throughput and cheaper transaction fees
+- **Efficient Batching**: Multiple fungible and non-fungible tokens can be transferred in a single transaction.
+
+There are also several advantages specifically to non-fungible tokens (NFTs):
+
+- **Scarcity**: Each NFT requires the deployment of its own individual contract, which in turn requires a deposit of ALPH. This unique structure imposes a upper limit on the production of NFTs on Alephium.
+- **Semi-fungible Tokens**: Each NFT has a corresponding issuing contract with the associated metadata. Usually the contract issues one token which makes the NFT unique. But it can also issue multiple tokens to make the token semi-fungible.
+
+To enhance the interoperability of tokens within the Alephium ecosystem, we have established standards for both fungible and non-fungible tokens. For more information on these standards and how to work with fungible and non-fungible tokens using the Web3 SDK, please refer to the [Fungible Token Standard](#fungible-token-standard) and [Non-Fungible Token Standard](#non-fungible-token-standard).
+
+There's a community-maintained [token list](https://github.com/alephium/token-list) where token issuers can submit their token details for proper display in wallets, explorers, and other ecosystem tools. The entries are checked only for the required metadata formats. No background checks or verifications are done on the token issuers or their projects. It's really important to do your own research before dealing with any token. Being on this list doesn't mean Alephium's core contributors endorse, audit, or verify the tokens.
+
+### Asset Permission System
+
+Asset Permission System (APS) is one of Alephium's unique features. It explicitly  defines asset flow within the code, ensuring all transfers are intentional and secure. By combining the UTXO model with APS, Alephium enhances user experience by eliminating the risks associated with token approvals in systems like EVM, while maintaining robust security.
+
+Alephium uses the stateful UTXO model where assets, including the native ALPH and other tokens are managed by UTXOs. This means that simple asset transfer between users only involves UTXOs, which is battle tested for its security in managing assets. No smart contract is involved here.
+
+For dApp transactions, if smart contracts transfer assets on behalf of the caller, no separate approval transactions are required because the approval is implicit in the UTXO model: If an input that contains a certain amount of token is included in the transaction, its owner has already given consent to the usage of that token in the context of this transaction, allowing the smart contract code within the transaction to potentially access and utilize the token.
+
+So, how do we ensure that assets implicitly approved by the UTXO model, along with the contract assets involved in the transaction, can be handled securely by the smart contracts? The answer is Asset Permission System (APS).
+
+#### Flow of Assets
+
+In Alephium, a dApp transaction involves executing a `TxScript`. For more information, refer to the [Transaction Script](#transaction-scripts) section. Below is an example of a transaction that runs a `TxScript` with two inputs, one fixed output, and some generated outputs.
+
+```text
+                  ----------------
+                  |              |
+                  |              |
+   1 Token A      |              |   1 ALPH (fixed output)
+================> |              | ========================>
+   6.1 ALPHs      |  <TxScript>  |   ??? (generated output)
+================> |              | ========================>
+                  |              |
+                  |              |
+                  |              |
+                  ----------------
+```
+
+Three things are worth noting here:
+
+- The generated outputs are the result of the `TxScript` execution. They won't be available until the transaction is successfully executed and included in a block. The complete transaction outputs include both the fixed outputs and generated outputs
+- The total assets available for `TxScript` are at least `1` Token A and `5.1` ALPHs, because we need to substract the `1` ALPH from the fixed output. For simplicity, we are ignoring the gas fee in this discussion
+- Additionally, `TxScript` can potentially access more assets from the contracts involved in the transaction
+
+Let's say the `TxScript` looks something like this:
+
+```rust
+TxScript ListNFT(
+    tokenAId: ByteVec,
+    price: U256,
+    marketPlace: NFTMarketPlace
+) {
+    let listingFee = marketPlace.getListingFee()
+    let approvedAlphAmount = listingFee + minimalContractDeposit!()
+
+    marketPlace.listNFT{callerAddress!() -> ALPH: approvedAlphAmount, tokenAId: 1}(tokenAId, price)
+}
+```
+
+Token `A` represents an NFT, and the purpose of this `TxScript` is to list this NFT on a marketplace contract. This line of code in `TxScript` is particularly interesting:
+
+```rust
+marketPlace.listNFT{callerAddress!() -> ALPH: approvedAlphAmount, tokenAId: 1}(tokenAId, price)
+```
+
+The code inside the curly braces approves that only `approvedAlphAmount` of ALPH and `1` unit of token `A` from the caller can be used in the `marketPlace.listNFT` function. This is true even though the caller has a total of `5.1` ALPH and `1` unit of token `A` accessible in the `TxScript`.
+
+The following scenarios could happen depending on the value of `approvedAlphAmount`:
+
+- If `approvedAlphAmount` is more than `5.1` ALPH, the transaction fails with `NotEnoughBalance` error
+- If `approvedAlphAmount` is less than `5.1` ALPH, say `1.1` ALPH, then `marketPlace.listNFT` can only access `1.1` ALPHs and `1` unit of token `A`. It does not have access to the rest of the `4` ALPHs
+- If `marketPlace.listNFT` has not spent the entirety of the approved assets, the remaining assets will be returned back, and continue be accessible by the `TxScript`
+
+Let's dive deeper into the `marketPlace.listNFT` function:
+
+```rust
+Contract NFTMarketPlace(
+    nftListingTemplateId: ByteVec
+) {
+    // Other code are omitted for brevity
+
+    pub fn getListingFee() -> U256 {
+        return 1 alph
+    }
+
+    @using(preapprovedAssets = true, assetsInContract = true)
+    pub fn listNFT(
+        tokenId: ByteVec,
+        price: U256
+    ) -> (Address) {
+        assert!(price > 0, ErrorCodes.NFTPriceIsZero)
+
+        // Only owner can list the NFT
+        let tokenOwner = callerAddress!()
+
+        let (encodeImmutableFields, encodeMutableFields) = NFTListing.encodeFields!(
+          tokenId, tokenOwner, selfAddress!(), commissionRate, price
+        )
+
+        // Charge the listing fee
+        transferTokenToSelf!(tokenOwner, ALPH, listingFee)
+
+        // Create the listing contract
+        let nftListingContractId = copyCreateSubContract!{
+          tokenOwner -> ALPH: minimalContractDeposit!(),
+          tokenId: 1
+        }(tokenId, nftListingTemplateId, encodeImmutableFields, encodeMutableFields)
+
+        return contractIdToAddress!(nftListingContractId)
+    }
+}
+```
+
+First thing to notice is the annotation for the `listNFT` method:
+
+```rust
+@using(preapprovedAssets = true, assetsInContract = true)
+```
+
+The `preapprovedAssets = true` annotation indicates that the `listNFT` function requires the caller to approve certain assets before the function can be executed, otherwise a compilation error will occur. The `assetsInContract = true` annotation suggests that the `listNFT` function will utilize assets from the `NFTMarketPlace` contract itself. For more detailed information on these annotations, refer to the [Function Annotations](#function-annotations) section.
+
+There are two places where assets are transferred in the `listNFT` function. First, it transfers the listing fee to the `NFTMarketPlace` contract, which is `1` ALPH:
+
+```rust
+// Charge the listing fee
+transferTokenToSelf!(tokenOwner, ALPH, listingFee)
+```
+
+Second, it creates a NFT listing sub-contract by calling the `copyCreateSubContract!` built-in function:
+
+```rust
+let nftListingContractId = copyCreateSubContract!{
+  tokenOwner -> ALPH: minimalContractDeposit!(),
+  tokenId: 1
+}(tokenId, nftListingTemplateId, encodeImmutableFields, encodeMutableFields)
+```
+
+This consumes `0.1` ALPH from the caller as the minimal deposit for the NFT listing contract. It also transfers `1` token from the caller to the newly created contract. Note that the `copyCreateSubContract!` built-in function also uses the curly braces syntax to specify the assets that are allowed to be spent in the function.
+
+When `marketPlace.listNFT` is executed by in the `TxScript`, it is authorized to spend `1.1` ALPH and `1` unit of token `A`. `marketPlace.listNFT` in turn call another method, and approves a subset of these approved assets to that method as well, as shown by the `copyCreateSubContract!` function. The flow of assets from the `TxScript` can be illustrated below:
+
+```text
+  Caller of the TxScript
+  (6.1 ALPH; 1 Token A)
+           ||
+           ||
+           || Subtract assets in
+           || Fixed outputs
+           ||
+           ||              Approves                         Approves
+           \/         (1.1 ALPH; 1 TokenA)            (0.1 ALPH; 1 TokenA)
+(5.1 ALPH; 1 TokenA) ======================> listNFT =====================> NFTListing
+                                               ||                      (+0.1 ALPH; +1 TokenA)
+                                               ||
+                                               ||
+                                               ||
+                                               ||
+                                               ||
+                                               \/
+                                          NFTMarketplace
+                                             (+1 ALPH)
+```
+
+After executing the `TxScript`, the final transaction will produce the following outputs:
+
+```text
+                        ----------------
+                        |              |
+                        |              |   1 ALPH (fixed output)
+  1 Token A             |              | =========================================>
+======================> |              |   1 ALPH, 1 Token A (NFTListing contract)
+  6.1 ALPHs             |  <TxScript>  | =========================================>
+======================> |              |   0.1 ALPH (NFTMarketPlace contract)
+                        |              | =========================================>
+                        |              |   4 ALPH - gas (change output)
+                        |              | =========================================>
+                        |              |
+                        ----------------
+```
+
+In a sophisticated dApp transaction, Asset Permission System ensures that the flow of assets within the complex method call graph is explicit and controlled. It enforces constraints on each method regarding which tokens and how much of them can be accessed. Together with the UTXO model, it offers an asset management solution that is simple, flexible and secure.
+
