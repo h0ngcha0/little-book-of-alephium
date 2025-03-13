@@ -178,17 +178,17 @@ Contract Bool () {
       let b = false
 
       // Logical operators
-      assert!(a && b == false, 0)
-      assert!(a || b == true, 1)
+      assert!((a && b) == false, 0)
+      assert!((a || b) == true, 1)
       assert!(!a == false, 2)
 
       // Combining logical operators
-      assert!((a || b) && !b == true, 3)
-      assert!(!(a && b) || (a || b) == true, 4)
+      assert!(((a || b) && !b) == true, 3)
+      assert!((!(a && b) || (a || b)) == true, 4)
 
       // With comparisons
-      assert!((5 > 3) && (2 < 4) == true, 5)
-      assert!((10 >= 10) || (5 <= 3) == true, 6)
+      assert!(((5 > 3) && (2 < 4)) == true, 5)
+      assert!(((10 >= 10) || (5 <= 3)) == true, 6)
 
       emit Debug(`Test successful for Bool`)
     }
