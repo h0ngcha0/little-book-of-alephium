@@ -9,7 +9,7 @@ The UTXO-based asset management model provides additional security benefits by d
 These features work together to create a development environment where security isn't an afterthought but is woven into the fabric of the language itself. As we explore Ralph's features and capabilities in more detail throughout this chapter, you'll see how this focus on simplicity and security translates into practical benefits for smart contract development.
 
 
-## Alephium's Stateful UTXO Model
+## Programming Model
 
 Before delving into the specifics of smart contract development in Ralph, it's important to understand Alephium's unique stateful UTXO (sUTXO) model, which forms the foundation for its smart contract capabilities. This section starts by comparing the classical UTXO model and account-based model, then examines how Alephium's sUTXO model combines their strengths to create a powerful new paradigm.
 
@@ -17,7 +17,7 @@ Before delving into the specifics of smart contract development in Ralph, it's i
 
 The UTXO (Unspent Transaction Output) model and Account model represent two fundamentally different paradigms for managing blockchain state and transactions, each with distinct advantages and trade-offs.
 
-The UTXO model, pioneered by Bitcoin, treats transactions like a chain of digital cash transfers. Each transaction consumes previous unspent outputs and creates new ones, similar to how physical cash is exchanged. When you spend money, you use up existing bills (inputs) and may receive change back (outputs). This model offers several compelling benefits. Since UTXOs can be processed inexplorer-backend-readonly-6d7b9bc6fd-gvvs4dependently, the system enables natural parallelization of transaction validation. The model also provides enhanced privacy as users can use different addresses for each transaction. Additionally, it allows for efficient batching of multiple payments into single transactions. Perhaps most importantly, the UTXO model has proven its security through Bitcoin's decade-plus history of securing billions in value.
+The UTXO model, pioneered by Bitcoin, treats transactions like a chain of digital cash transfers. Each transaction consumes previous unspent outputs and creates new ones, similar to how physical cash is exchanged. When you spend money, you use up existing bills (inputs) and may receive change back (outputs). This model offers several compelling benefits. Since UTXOs can be processed independently, the system enables natural parallelization of transaction validation. The model also provides enhanced privacy as users can use different addresses for each transaction. Additionally, it allows for efficient batching of multiple payments into single transactions. Perhaps most importantly, the UTXO model has proven its security through Bitcoin's decade-plus history of securing billions in value.
 
 However, the UTXO model faces important limitations when it comes to smart contract development. The lack of persistent state between transactions complicates the implementation of complex business logic. For instance, tracking aggregated data such as a counter across transactions is challenging, despite being a common scenario in morden smart contracts. Additionally, the UTXO scripting language's expressiveness is often intentionally limited to mitigate potential security issues, prioritizing security over flexibility.
 
@@ -36,6 +36,7 @@ Contract states, on the other hand, are managed using account-based model, where
 Transactions in the sUTXO model support both basic asset transfers and complex smart contract interactions. For basic transfers, they follow the classical UTXO pattern: consuming existing UTXOs as inputs and creating new ones as outputs. For example, when Alice sends 5 ALPHs to Bob, the transaction consumes Alice's UTXOs containing 5+ ALPHs in total and creates two new UTXOs: one with 5 ALPHs for Bob and another with the remaining balance (minus fees) returned to Alice.
 
 The sUTXO model extends this by enabling transactions to also interact with smart contracts in powerful ways. A single transaction can transfer assets between users and contracts while executing contract logic and modifying contract states. For instance, when swapping tokens on a DEX, the transaction would:
+
 1. Consume the user's UTXO containing the input tokens
 2. Execute the DEX contract's swap logic
 3. Update the contract's internal state (e.g. liquidity pools)
@@ -45,15 +46,15 @@ Through this innovative model, Alephium achieves the best of both worlds: the sc
 
 ### Hybrid Programming Model
 
-Alephium's sUTXO model necessitates a specialized programming language (Ralph) and virtual machine (Alphred). They work in concert to provide an expressive yet secure programming environment. The UTXO-based asset management treats tokens as first-class citizens, just like native ALPH tokens, and eliminates a class of common UX and security issues found in account-based models such as unlimited token approvals. Together with Ralph's carefully designed programming constructs, the Alphred VM prevents reentrancy attacks, unintended function calls, and accidental state updates. It also ensures that assets move strictly as specified by the contract code, making it extremely difficult for malicious actors to manipulate asset transfers in unintended ways. These built-in security features free developers to focus more on building their dApps.
+Alephium's sUTXO model requires a specialized programming language (Ralph) and virtual machine (Alphred). They work together to provide an expressive yet secure programming environment. The UTXO-based asset management treats tokens as first-class citizens, just like native ALPH tokens, and eliminates a class of common UX and security issues found in account-based models such as unlimited token approvals. Together with Ralph's carefully designed programming constructs, the Alphred VM prevents reentrancy attacks, unintended function calls, and accidental state updates. It also ensures that assets move strictly as specified by the contract code, making it extremely difficult for malicious actors to manipulate asset transfers in unintended ways. These built-in security features free developers to focus more on building their dApps.
 
-Alephium also supports Bitcoin-like stateless programming where logic happens entirely within the scope of UTXOs. For example, it supports Pay-to-Script-Hash (P2SH) using the Ralph programming language, which is more expressive than Bitcoin script, to create sophisticated spending conditions. In fact, the support of Schnorr signatures in Alephium is implemented using this approach.
+Alephium also supports Bitcoin-like stateless programming where logic is entirely contained within the scope of UTXOs. For example, it supports Pay-to-Script-Hash (`P2SH`) to create sophisticated spending conditions using the Ralph programming language, which is more expressive than Bitcoin script. In fact, the support of Schnorr signatures in Alephium is implemented using this approach.
 
-The separation of asset and contract states, combined with its support for both stateful and stateless programming, opens up new possibilities for dApps development. This hybrid approach draws interesting parallels to the evolution of programming languages. The UTXO model's immutability and absence of shared state aligns with functional programming (FP), which emphasizes on pure functions and immutable data, while the account-based model mirrors object-oriented programming (OOP), where objects manage mutable state that evolves over time. Notably, both classical UTXO model and pure functional languages such as Haskell are harder to program and thus never gained traction by the wider developer community. By contrast, despite of the frequent criticisms about Java's state management, it still dominates the industry because of its developer friendliness, much like Account-based model's widespread adoption in the blockchain space.
+The separation of asset and contract states, along with support for both stateful and stateless programming, opens up new opportunities for dApp development. This hybrid approach draws interesting parallels to the evolution of programming languages. The UTXO model's immutability and lack of shared state are akin to functional programming (FP), which focuses on pure functions and immutable data. In contrast, the account-based model resembles object-oriented programming (OOP), where objects manage mutable state that changes over time. Notably, both the classical UTXO model and pure functional languages like Haskell are more challenging to program and have not gained widespread adoption among developers. Conversely, despite frequent criticisms of Java's state management, it remains dominant in the industry due to its developer-friendliness, much like the widespread adoption of the account-based model in the blockchain space.
 
-Alephium’s stateful UTXO (sUTXO) model mirrors the evolution of modern programming languages. Just as Scala and Rust harness the combined strength of functional and object-oriented paradigms, sUTXO model represents a similar evolutionary step in blockchain programming model that preserves the robust security and clarity of immutable UTXO model, while incorporating the expressiveness and flexibility of account-based model. This hybrid design empowers developers toexplorer-backend-readonly-6d7b9bc6fd-gvvs4 build sophisticated dApps with both the security benefits of UTXO and the flexibility of account-based models.
+Just as Scala and Rust harness the strength of both functional and object-oriented paradigms, sUTXO model represents a similar evolutionary step in blockchain programming model that preserves the robust security and clarity of immutable UTXO model, while incorporating the expressiveness and flexibility of account-based model. This hybrid design empowers developers to build sophisticated dApps with both the security benefits of UTXO and the flexibility of account-based models.
 
-## Ralph Basics
+## The Ralph Language
 
 Ralph is the smart contract programming language specifically designed for the Alephium blockchain, with a focus on security, simplicity, and efficiency. The design of Ralph follows the following principles:
 
@@ -2317,13 +2318,15 @@ Next, we mint an NFT to the collection and derive its contract id using `subCont
 
 Interactions with deployed contracts can be divided into two categories based on their effects and execution model:
 
-- **Views**: These are read-only operations that query contract state. They:
+**Views** are read-only operations that query contract state. They:
+
    - Execute immediately when called
    - Don't require gas fees
    - Return results directly to the caller
    - Never modify blockchain state or transfer assets
 
-- **Transactions**: These operations modify contract state, transfer assets, or both. They:
+**Transactions** are operations that modify contract state, transfer assets, or both. They:
+
    - Require gas fees for execution
    - Are executed only when transactions are mined on the blockchain
    - Return only the transaction id to the caller
