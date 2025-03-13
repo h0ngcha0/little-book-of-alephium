@@ -3159,7 +3159,9 @@ If the `add` function is a [transact function](#transact-functions) which requir
 
 ## Putting it all together
 
-Now that we have covered the basics of building smart contracts in Ralph, let's put all the concepts together and look at a complete example.
+Now that we have covered the basics of building smart contracts in Ralph, let's put all the concepts together and walk through a complete example from project creation to deployment. After that, we will explore a few more advanced examples and provide references for further learning.
+
+### Token Faucet
 
 When we scaffold a new project using the [Alephium CLI](https://docs.alephium.org/sdk/cli/), it automatically generates a `TokenFaucet` contract along with unit and integration tests for it.
 
@@ -3526,7 +3528,113 @@ Token faucet contract address: 27ckgjZvFfjWdBZyK5bHtJr5EDMY7BVXrR9SRhwuGTk5D
 
 Congratulations! You have successfully deployed the `TokenFaucet` contract to testnet!
 
-### More Examples
+### Dynamic Arrays
+
+In Ralph, arrays are not supported as a built-in data structure. However, you can simulate dynamic arrays using `ByteVec`, which can be used to store and manipulate arbitrary data. The following is an example of a contract that simulates a dynamic array for `U256` type:
+
+```rust
+Contract DynamicArrayForInt() {
+    pub fn get(array: ByteVec, index: U256) -> U256 {
+        assert!(size!(array) % 4 == 0, 0)
+
+        let offset = index * 4
+        let bytes = byteVecSlice!(array, offset, offset + 4)
+        return u256From4Byte!(bytes)
+    }
+
+    // Avoid this function because it costs more gas and creates new ByteVec.
+    pub fn update(array: ByteVec, index: U256, value: U256) -> ByteVec {
+        assert!(size!(array) % 4 == 0, 0)
+
+        let offset = index * 4
+        return byteVecSlice!(array, 0, offset) ++
+               u256To4Byte!(value) ++
+               byteVecSlice!(array, offset + 4, size!(array))
+    }
+
+    pub fn push(array: ByteVec, value: U256) -> ByteVec {
+        assert!(size!(array) % 4 == 0, 0)
+
+        return array ++ u256To4Byte!(value)
+    }
+
+    pub fn pop(array: ByteVec) -> (ByteVec, U256) {
+        assert!(size!(array) % 4 == 0, 0)
+
+        let offset = size!(array) - 4
+        let value = u256From4Byte!(byteVecSlice!(array, offset, offset + 4))
+        return byteVecSlice!(array, 0, offset), value
+    }
+
+    pub fn sum(array: ByteVec) -> U256 {
+        assert!(size!(array) % 4 == 0, 0)
+        assert!(size!(array) > 0, 1)
+
+        let mut sum = 0
+        for(let mut offset = 0; offset < size!(array); offset = offset + 4) {
+            let bytes = byteVecSlice!(array, offset, offset + 4)
+            let value = u256From4Byte!(bytes)
+            sum = sum + value
+        }
+        return sum
+    }
+}
+```
+
+The `DynamicArrayForInt` contract manages a dynamic array of integers stored in a `ByteVec`, with each integer occupying 4 bytes. It includes public functions to `get`, `update`, `push` and `pop` integer from the array.
+
+The key insight here is that given an index, we can determine the offset of a `U256` integer within the `ByteVec` because each of them occupies exactly 4 bytes. By leveraging the `byteVecSlice!` built-in functions, we can accurately retrieve or replace the `ByteVec` version of the `U256` integer at the correct offset from the array based on its index.
+
+`DynamicArrayForInt` also includes a `sum` function, which iterates through the entire `ByteVec` value, converting each 4-byte segment back into a `U256` integer and accumulating the total sum.
+
+The following transaction script illustrates how to use the `DynamicArrayForInt` contract:
+
+```rust
+TxScript TestDynamicArrayForInt(contract: DynamicArrayForInt) {
+    let mut array = #
+    array = contract.push(array, 5)
+    array = contract.push(array, 10)
+    array = contract.push(array, 15)
+    assert!(contract.sum(array) == 30, 1)
+
+    array = contract.update(array, 1, 20)
+    assert!(contract.sum(array) == 40, 2)
+
+    let (newArray, value) = contract.pop(array)
+    assert!(value == 15, 4)
+    assert!(contract.sum(newArray) == 25, 3)
+    assert!(contract.get(newArray, 0) == 5, 5)
+}
+```
+
+For more details on the `DynamicArrayForInt` contract and its test cases, refer to the [dynamic array](https://github.com/alephium/ralph-example/tree/master/dynamic-array) contracts in the [Ralph Example](https://github.com/alephium/ralph-example) repository.
+
+### Gasless Transactions
+
+In Ralph, we can use the built-in `payGasFee` built-in function to allow a different user or contract to pay either part or all of the gas fees on behalf of the caller. The business logic of who should pay the gas fee is completely programmable.
+
+```rust
+Contract Gasless() {
+    @using(checkExternalCaller = false)
+    pub fn payGas() -> () {
+       return
+    }
+
+    @using(assetsInContract = true, checkExternalCaller = false)
+    pub fn payNoGas() -> () {
+       payGasFee!(selfAddress!(), txGasFee!())
+       return
+    }
+}
+```
+
+The `payGasFee!` built-in function takes two parameters. The first one is the gas payer address. The second one is the gas fee to be paid. If the gas payer intends to pay the entire gas fee, the gas fee should be set to `txGasFee!()`.
+
+In the `Gasless` contract, when `payGas` function is called in a transaction, the gas fees will be paid by the caller. When `payNoGas` function is called in a transaction, all the gas fees will be paid by the contract itself.
+
+For more details on the `Gasless` contract and its test cases, refer to the [gasless](https://github.com/alephium/ralph-example/tree/master/gasless) contracts in the [Ralph Example](https://github.com/alephium/ralph-example) repository.
+
+### More Resources
 
 If you want to learn more about smart contract development in Ralph through examples, you might find the following projects helpful:
 
@@ -3534,3 +3642,4 @@ If you want to learn more about smart contract development in Ralph through exam
 - [Alephium DEX](https://github.com/alephium/alephium-dex)
 - [Ralph Examples](https://github.com/alephium/ralph-example)
 - [Alephium Bridge](https://github.com/alephium/wormhole-fork/tree/add-alephium-to-wormhole/alephium)
+
