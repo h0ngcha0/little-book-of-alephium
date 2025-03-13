@@ -2399,7 +2399,7 @@ console.assert(results.getName.returns === stringToHex("MyToken"))
 console.assert(results.getOwner.returns === signer.address)
 ```
 
-##### Transct Functions
+##### Transact Functions
 
 Web3 SDK also generates the `transact` methods for all functions in the `MyToken` contract. We can call the `withdraw` function to withdraw `100` tokens using the `signer` account:
 
@@ -3154,3 +3154,380 @@ In the example above, the `add` function in the `Math` contract is a [view funct
 
 If the `add` function is a [transact function](#transact-functions) which requires a transaction to be executed, the debug message will only appear in the full node log during integration tests, as the execution is asynchronous and cannot return results to the terminal console immediately. However, in unit tests, debug messages will still be printed in both the terminal console and the full node log.
 
+## Putting it all together
+
+Now that we have covered the basics of building smart contracts in Ralph, let's put all the concepts together and look at a complete example.
+
+When we scaffold a new project using the [Alephium CLI](https://docs.alephium.org/sdk/cli/), it automatically generates a `TokenFaucet` contract along with unit and integration tests for it.
+
+```bash
+$ npx @alephium/cli init token-faucet
+...
+✅ Done.
+✨ Project is initialized!
+```
+
+Let's take a look at the `token-faucet` project directory. The Ralph source code is found in the `contracts` directory. The unit and integration tests are located in the `test` directory, and the contract deployment script is under the `scripts` directory.
+
+```bash
+$ tree
+.
+├── alephium.config.ts
+├── contracts
+│   ├── token.ral
+│   └── withdraw.ral
+├── jest-config.json
+├── package.json
+├── package-lock.json
+├── README.md
+├── scripts
+│   └── 0_deploy_faucet.ts
+├── src
+│   └── token.ts
+├── test
+│   └── token.test.ts
+└── tsconfig.json
+
+5 directories, 11 files
+```
+
+Here is the source code for the `TokenFaucet` contract defined in the `token.ral` file:
+
+```rust
+import "std/fungible_token_interface"
+
+// Defines a contract named `TokenFaucet`.
+// A contract is a collection of fields (its state) and functions.
+// Once deployed, a contract resides at a specific address on the Alephium blockchain.
+// Contract fields are permanently stored in contract storage.
+// A contract can issue an initial amount of token at its deployment.
+Contract TokenFaucet(
+    symbol: ByteVec,
+    name: ByteVec,
+    decimals: U256,
+    supply: U256,
+    mut balance: U256
+) implements IFungibleToken {
+
+    // Events allow for logging of activities on the blockchain.
+    // Alephium clients can listen to events in order to react to contract state changes.
+    event Withdraw(to: Address, amount: U256)
+
+    enum ErrorCodes {
+        InvalidWithdrawAmount = 0
+    }
+
+    // A public function that returns the initial supply of the contract's token.
+    // Note that the field must be initialized as the amount of the issued token.
+    pub fn getTotalSupply() -> U256 {
+        return supply
+    }
+
+    // A public function that returns the symbol of the token.
+    pub fn getSymbol() -> ByteVec {
+        return symbol
+    }
+
+    // A public function that returns the name of the token.
+    pub fn getName() -> ByteVec {
+        return name
+    }
+
+    // A public function that returns the decimals of the token.
+    pub fn getDecimals() -> U256 {
+        return decimals
+    }
+
+    // A public function that returns the current balance of the contract.
+    pub fn balance() -> U256 {
+        return balance
+    }
+
+    // A public function that transfers tokens to anyone who calls it.
+    // The function is annotated with `updateFields = true` as it changes the contract fields.
+    // The function is annotated as using contract assets as it does.
+    // The function is annotated with `checkExternalCaller = false` as there is no need to
+    // check the external caller.
+    @using(assetsInContract = true, updateFields = true, checkExternalCaller = false)
+    pub fn withdraw(amount: U256) -> () {
+        // Debug events can be helpful for error analysis
+        emit Debug(`The current balance is ${balance}`)
+
+        // Make sure the amount is valid
+        assert!(amount <= 2, ErrorCodes.InvalidWithdrawAmount)
+        // Functions postfixed with `!` are built-in functions.
+        transferTokenFromSelf!(callerAddress!(), selfTokenId!(), amount)
+        // Ralph does not allow underflow.
+        balance = balance - amount
+
+        // Emit the event defined earlier.
+        emit Withdraw(callerAddress!(), amount)
+    }
+}
+```
+
+The `TokenFaucet` contract implements the `IFungibleToken` interface defined in the [Fungible Token Standard](#fungible-token-standard). Other than the functions required by the interface, the contract also maintains a mutable `balance` field to keep track of its token balance.
+
+The `withdraw` function is a [transact function](#transact-functions) that allows anyone to withdraw up to 2 tokens from the contract. The function is annotated with `assetsInContract = true` as it uses the contract's assets. It is also annotated with `updateFields = true` because it updates the `balance` contract fields. Since anyone can call the function, the `checkExternalCaller` annotation is set to `false`. For a detailed explanation of the `@using` annotation, refer to the [Function Annotations](#function-annotations) section.
+
+The `WithDraw` [transaction script](#transaction-scripts) is defined in the `withdraw.ral` file. The logic is straightforward: it simply calls the `withdraw` function of the `TokenFaucet` contract with the specified amount.
+
+```rust
+// Defines a transaction script.
+// A transaction script is a piece of code to interact with contracts on the blockchain.
+// Transaction scripts can use the input assets of transactions in general.
+// A script is disposable and will only be executed once along with the holder transaction.
+TxScript Withdraw(token: TokenFaucet, amount: U256) {
+    // Call token contract's withdraw function.
+    token.withdraw(amount)
+}
+```
+
+We can run the following commands to compile the project:
+
+```bash
+$ npx @alephium/cli compile
+...
+Full node version: v3.12.2
+Compiling contracts in folder "contracts"
+✅ Compilation completed!
+Generating code for contract TokenFaucet
+Generating code for script Withdraw
+✅ Codegen completed!
+```
+
+After running the compile command, an `artifacts` directory will be created in the project root directory. This directory not only contains the compiled contract and transaction script in JSON format, but also the generated TypeScript classes for each contract and transaction script. These TypeScript classes make it significantly easier to test and interact with the contracts, as demonstrated throughout this chapter.
+
+```bash
+$ tree artifacts
+artifacts
+├── TokenFaucet.ral.json
+├── ts
+│   ├── contracts.ts
+│   ├── index.ts
+│   ├── scripts.ts
+│   └── TokenFaucet.ts
+└── Withdraw.ral.json
+```
+
+Both the integration test and unit test are located in the `token.test.ts` under the `test` directory. Unit tests are written for the `withdraw` function in the `TokenFaucet` contract:
+
+```typescript
+// Code excerpt from token.test.ts
+beforeAll(async () => {
+  // ... Skip set up code for brevity
+  testParamsFixture = {
+    // a random address that the test contract resides in the tests
+    address: testContractAddress,
+    // assets owned by the test contract before a test
+    initialAsset: { alphAmount: 10n ** 18n, tokens: [{ id: testTokenId, amount: 10n }] },
+    // initial state of the test contract
+    initialFields: {
+      symbol: Buffer.from('TF', 'utf8').toString('hex'),
+      name: Buffer.from('TokenFaucet', 'utf8').toString('hex'),
+      decimals: 18n,
+      supply: 10n ** 18n,
+      balance: 10n
+    },
+    // arguments to test the target function of the test contract
+    testArgs: { amount: 1n },
+    // assets owned by the caller of the function
+    inputAssets: [{ address: testAddress, asset: { alphAmount: 10n ** 18n } }]
+  }
+})
+
+it('test withdraw', async () => {
+  const testParams = testParamsFixture
+  const testResult = await TokenFaucet.tests.withdraw(testParams)
+  // only one contract involved in the test
+  const contractState = testResult.contracts[0] as TokenFaucetTypes.State
+  expect(contractState.address).toEqual(testContractAddress)
+  expect(contractState.fields.supply).toEqual(10n ** 18n)
+  // ... Skip more verification for brevity
+})
+```
+
+The test sets up the initial asset and state of the `TokenFaucet` contract using the `initialAsset` and `initialFields` fields respectively. It also uses the `inputAsset` field to set up caller's assets for the test before calling the `withdraw` function with the specified amount (`1n`) in `testArgs`. After getting the test result, it continues to verify the correctness of the contract state, balance and events.
+
+In the integration test, the `TokenFaucet` contract is deployed to the devnet and the `withdraw` function is tested by different signers for 10 times. After each call, the test verifies the balance of the contract.
+
+```typescript
+describe('integration tests', () => {
+  beforeAll(async () => {
+    web3.setCurrentNodeProvider('http://127.0.0.1:22973', undefined, fetch)
+  })
+
+  it('should withdraw on devnet', async () => {
+    const signer = await testNodeWallet()
+    const deployments = await deployToDevnet()
+
+    // Test with all of the addresses of the wallet
+    for (const account of await signer.getAccounts()) {
+      const testAddress = account.address
+      await signer.setSelectedAccount(testAddress)
+      const testGroup = account.group
+
+      const faucet = deployments.getInstance(TokenFaucet, testGroup)
+      if (faucet === undefined) {
+        console.log(`The contract is not deployed on group ${account.group}`)
+        continue
+      }
+
+      expect(faucet.groupIndex).toEqual(testGroup)
+      const initialState = await faucet.fetchState()
+      const initialBalance = initialState.fields.balance
+
+      // Call `withdraw` function 10 times
+      for (let i = 0; i < 10; i++) {
+        await faucet.transact.withdraw({
+          signer: signer,
+          attoAlphAmount: DUST_AMOUNT * 3n,
+          args: { amount: 1n }
+        })
+
+        const newState = await faucet.fetchState()
+        const newBalance = newState.fields.balance
+        expect(newBalance).toEqual(initialBalance - BigInt(i) - 1n)
+      }
+    }
+  }, 20000)
+})
+```
+
+Unit tests and integration tests can be run together using the following command:
+
+```bash
+$ npx @alephium/cli test
+...
+PASS  test/token.test.ts
+  unit tests
+    ✓ test withdraw (299 ms)
+    ✓ test withdraw (236 ms)
+  integration tests
+    ✓ should withdraw on devnet (1626 ms)
+
+Test Suites: 1 passed, 1 total
+Tests:       3 passed, 3 total
+Snapshots:   0 total
+Time:        5.045 s
+Ran all test suites.
+```
+
+For more details on how to write unit and integration tests, refer to the [Unit Test](#unit-test) and [Integration Test](#integration-test) sections.
+
+Now that all the tests are passed, we are finally ready to deploy the `TokenFaucet` contract. The deployment command looks for the deployment scripts under the `scripts` directory and executes them in the order of the file names. For `TokenFaucet`, the deployment script is `0_deploy_faucet.ts`:
+
+```typescript
+import { Deployer, DeployFunction, Network } from '@alephium/cli'
+import { Settings } from '../alephium.config'
+import { TokenFaucet } from '../artifacts/ts'
+import { stringToHex } from '@alephium/web3'
+
+// This deploy function will be called by cli deployment tool automatically
+// Note that deployment scripts should prefixed with numbers (starting from 0)
+const deployFaucet: DeployFunction<Settings> = async (
+  deployer: Deployer,
+  network: Network<Settings>
+): Promise<void> => {
+  // Get settings
+  const issueTokenAmount = network.settings.issueTokenAmount
+  const result = await deployer.deployContract(TokenFaucet, {
+    // The amount of token to be issued
+    issueTokenAmount: issueTokenAmount,
+    // The initial states of the faucet contract
+    initialFields: {
+      symbol: stringToHex('TF'),
+      name: stringToHex('TokenFaucet'),
+      decimals: 18n,
+      supply: issueTokenAmount,
+      balance: issueTokenAmount
+    }
+  })
+  console.log('Token faucet contract id: ' + result.contractInstance.contractId)
+  console.log('Token faucet contract address: ' + result.contractInstance.address)
+}
+
+export default deployFaucet
+```
+
+The `deployFaucet` function sets up the initial fields for the `TokenFaucet` contract, including the token's symbol, name, decimals, supply, and balance. It then uses the `deployer` to deploy the contract. This deployment script can be used to deploy the `TokenFaucet` contract to any network, with network specific settings (e.g. `issueTokenAmount`) provided by the `network` argument.
+
+The `network` argument is set up in the `alephium.config.ts` file under the project root directory:
+
+```typescript
+import { Configuration } from '@alephium/cli'
+import { Number256 } from '@alephium/web3'
+
+// Settings are usually for configuring
+export type Settings = {
+  issueTokenAmount: Number256
+}
+
+const defaultSettings: Settings = {
+  issueTokenAmount: 100n
+}
+
+const configuration: Configuration<Settings> = {
+  networks: {
+    devnet: {
+      nodeUrl: 'http://127.0.0.1:22973',
+      // here we could configure which address groups to deploy the contract
+      privateKeys: ['a642942e67258589cd2b1822c631506632db5a12aabcf413604e785300d762a5'],
+      settings: defaultSettings
+    },
+
+    testnet: {
+      nodeUrl: process.env.NODE_URL as string,
+      privateKeys: process.env.PRIVATE_KEYS === undefined
+                   ? [] : process.env.PRIVATE_KEYS.split(','),
+      settings: defaultSettings
+    },
+
+    mainnet: {
+      nodeUrl: process.env.NODE_URL as string,
+      privateKeys: process.env.PRIVATE_KEYS === undefined
+                   ? [] : process.env.PRIVATE_KEYS.split(','),
+      settings: defaultSettings
+    }
+  }
+}
+
+export default configuration
+```
+
+For each of the networks, we can specify the following parameters: The `nodeUrl` is the URL of the node that will be used to deploy the contract. The `privateKeys` are the private keys of the accounts that will be used to deploy the contract. If the contract needs to be deployed to multiple groups, we need to specify multiple private keys here. The `settings` contains the parameters that will be used to configure the contract deployment, such as the amount of token to be issued.
+
+To deploy the contract to devnet, we can run the following command:
+
+```bash
+# Your contract address and contract id will be different
+$ npx @alephium/cli deploy
+...
+Deploying contract TokenFaucet
+Token faucet contract id: 81a65645213b76aa9d5308d7f0822177bbaf59050617285b21e546885026f200
+Token faucet contract address: 23R3pDsYs14BQScNDBQ2JGAV4zvhLnHWoJs8E8YngMD2f
+✅ Scripts deployment executed!
+```
+
+To deploy the contract to testnet (same for mainnet), we can run the following command:
+
+```bash
+$ export NODE_URL=https://node.testnet.alephium.org
+$ export PRIVATE_KEYS="..." # Your private keys
+$ npx @alephium/cli deploy --network testnet
+Deploying contract TokenFaucet
+Token faucet contract id: c014afbc57d2769368d89d3ea26c84d121585e35f5f5d25d711bc6641e460e00
+Token faucet contract address: 27ckgjZvFfjWdBZyK5bHtJr5EDMY7BVXrR9SRhwuGTk5D
+✅ Scripts deployment executed!
+```
+
+Congratulations! You have successfully deployed the `TokenFaucet` contract to testnet!
+
+### More Examples
+
+If you want to learn more about smart contract development in Ralph through examples, you might find the following projects helpful:
+
+- [Alephium NFT](https://github.com/alephium/alephium-nft)
+- [Alephium DEX](https://github.com/alephium/alephium-dex)
+- [Ralph Examples](https://github.com/alephium/ralph-example)
+- [Alephium Bridge](https://github.com/alephium/wormhole-fork/tree/add-alephium-to-wormhole/alephium)
