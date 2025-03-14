@@ -1285,7 +1285,7 @@ Contracts in Alephium have both immutable and mutable fields, which are stored a
 
 `copyCreateCarWithToken` is similar to `copyCreateCar`, but it also allows you to issue a specific amount of tokens for the newly created contract using the `copyCreateContractWithToken!` built-in function.
 
-In Alephium, tokens are issued through contract creation, and the token ID is exactly the same as the contract ID. By default, the issued tokens will be owned by the contract itself. However, `copyCreateContractWithToken!` provides also allows you to specify a recipient for the issued tokens.
+In Alephium, tokens are issued through contract creation, and the token ID is exactly the same as the contract ID. By default, the issued tokens will be owned by the contract itself. However, `copyCreateContractWithToken!` allows you to specify a recipient for the issued tokens.
 
 Let's test the `Car` and `CarFactory` contracts using the TypeScript code below:
 
