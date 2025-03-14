@@ -1219,7 +1219,7 @@ This section will not attempt to cover the [complete list](https://docs.alephium
 Ralph provides built-in functions for contract creation, migration, and destruction. In Alephium, tokens are also issued through contract creation.
 
 ```rust
-Contract CarFactory(mut carId: ByteVec) {
+Contract CarFactory(mut carAddress: ByteVec) {
     @using(preapprovedAssets = true, checkExternalCaller = false, updateFields = true)
     pub fn createCar(
         carByteCode: ByteVec,
@@ -1228,10 +1228,10 @@ Contract CarFactory(mut carId: ByteVec) {
         initialPrice: U256
     ) -> Car {
         let (immFields, mutFields) = Car.encodeFields!(model, year, initialPrice)
-        carId = createContract!{callerAddress!() -> ALPH: minimalContractDeposit!()}(
+        carAddress = createContract!{callerAddress!() -> ALPH: minimalContractDeposit!()}(
             carByteCode, immFields, mutFields
         )
-        return Car(carId)
+        return Car(carAddress)
     }
 
     @using(preapprovedAssets = true, checkExternalCaller = false, updateFields = true)
@@ -1242,10 +1242,10 @@ Contract CarFactory(mut carId: ByteVec) {
         initialPrice: U256
     ) -> Car {
         let (immFields, mutFields) = Car.encodeFields!(model, year, initialPrice)
-        carId = copyCreateContract!{callerAddress!() -> ALPH: minimalContractDeposit!()}(
+        carAddress = copyCreateContract!{callerAddress!() -> ALPH: minimalContractDeposit!()}(
             carContractId, immFields, mutFields
         )
-        return Car(carId)
+        return Car(carAddress)
     }
 
     @using(preapprovedAssets = true, checkExternalCaller = false, updateFields = true)
@@ -1257,10 +1257,10 @@ Contract CarFactory(mut carId: ByteVec) {
         tokenAmount: U256
     ) -> Car {
         let (immFields, mutFields) = Car.encodeFields!(model, year, initialPrice)
-        carId = copyCreateContractWithToken!{callerAddress!() -> ALPH: minimalContractDeposit!()}(
+        carAddress = copyCreateContractWithToken!{callerAddress!() -> ALPH: minimalContractDeposit!()}(
             carContractId, immFields, mutFields, tokenAmount
         )
-        return Car(carId)
+        return Car(carAddress)
     }
 }
 
