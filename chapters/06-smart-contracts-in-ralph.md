@@ -1242,8 +1242,7 @@ Contract CarFactory(mut carId: ByteVec) {
         initialPrice: U256
     ) -> Car {
         let (immFields, mutFields) = Car.encodeFields!(model, year, initialPrice)
-        carId = copyCreateContract!{callerAddress!() -> ALPH: mini
-malContractDeposit!()}(
+        carId = copyCreateContract!{callerAddress!() -> ALPH: minimalContractDeposit!()}(
             carContractId, immFields, mutFields
         )
         return Car(carId)
