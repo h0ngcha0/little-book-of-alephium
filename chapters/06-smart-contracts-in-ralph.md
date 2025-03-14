@@ -396,6 +396,10 @@ The string representation of an address is the base58 encoding of its byte repre
 
 ```rust
 Contract AddressTest () {
+    fn prefix(address: Address) -> ByteVec {
+       return byteVecSlice!(toByteVec!(address), 0, 1)
+    }
+
     pub fn test() -> ()  {
       // Address literals must start with `@`
       let p2pkh = @1DrDyTr9RpRsQnDnXo2YRiPzPW4ooHX5LLoqXrqfMrpQH
@@ -415,10 +419,6 @@ Contract AddressTest () {
 
       emit Debug(`Test successful for Address`)
    }
-
-    fn prefix(address: Address) -> ByteVec {
-       return byteVecSlice!(toByteVec!(address), 0, 1)
-    }
 }
 ```
 
@@ -436,6 +436,10 @@ Ralph supports `tuple`, a product type containing an ordered, fixed-size collect
 
 ```rust
 Contract TupleExample() {
+    fn createTuple() -> (U256, ByteVec, Bool) {
+        return 100, b`tuple example`, false
+    }
+
     pub fn test() -> () {
         // A tuple with different types
         let (mut first, second, third) = createTuple()
@@ -445,10 +449,6 @@ Contract TupleExample() {
         assert!(second == b`tuple example`, 1)
         assert!(third == false, 2)
         emit Debug(`Tuple test successful`)
-    }
-
-    fn createTuple() -> (U256, ByteVec, Bool, Address) {
-        return 100, b`tuple example`, false
     }
 }
 ```
@@ -598,7 +598,6 @@ Contract Counters() {
     counters[key] = value + 1
   }
 
-  @using(checkExternalCaller = false)
   pub fn currentCount(key: Address) -> U256 {
     if (counters.contains!(key)) {
       return counters[key]
@@ -622,10 +621,10 @@ Contract Counters() {
 
 The `Counters` contract demonstrates maps in Ralph by implementing a simple personal counter. Users can create a counter tied to their address (with a map entry deposit), increment it, check its value, and eventually clear it (recovering their deposit).
 
-Function annotations play a crucial role in Ralph smart contracts, and we'll explore them in more details in the next section. For now, let's briefly examine the annotations used in the `Counters` contract to understand their purpose:
+Function annotations play a crucial role in Ralph smart contracts, and we'll explore them in more details in the [Function Annotations](#function-annotations) section. For now, let's briefly examine the annotations used in the `Counters` contract to understand their purpose:
 
 - `@using(preapprovedAssets = true)`: This annotation requires the caller to approve assets before calling the function. In this case, the caller needs to approve enough ALPH to cover the map entry deposit.
-- `@using(checkExternalCaller = false)`: By default, Ralph requires public functions to check the caller, otherwise it won't compile. This annotation allows any caller to call the function.
+- `@using(checkExternalCaller = false)`: By default, Ralph requires public functions that can potentially update blockchain state to check the caller, otherwise it won't compile. This annotation allows any caller to call the function.
 
 Let's test the `Counters` contract using the TypeScript code below:
 
