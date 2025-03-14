@@ -1219,19 +1219,19 @@ This section will not attempt to cover the [complete list](https://docs.alephium
 Ralph provides built-in functions for contract creation, migration, and destruction. In Alephium, tokens are also issued through contract creation.
 
 ```rust
-Contract CarFactory(mut carId: ByteVec) {
+Contract CarFactory(mut carAddress: ByteVec) {
     @using(preapprovedAssets = true, checkExternalCaller = false, updateFields = true)
     pub fn createCar(
         carByteCode: ByteVec,
         model: ByteVec,
         year: U256,
-        initialPrice: U256
+        price: U256
     ) -> Car {
-        let (immFields, mutFields) = Car.encodeFields!(model, year, initialPrice)
-        carId = createContract!{callerAddress!() -> ALPH: minimalContractDeposit!()}(
+        let (immFields, mutFields) = Car.encodeFields!(model, year, price)
+        carAddress = createContract!{callerAddress!() -> ALPH: minimalContractDeposit!()}(
             carByteCode, immFields, mutFields
         )
-        return Car(carId)
+        return Car(carAddress)
     }
 
     @using(preapprovedAssets = true, checkExternalCaller = false, updateFields = true)
@@ -1239,13 +1239,13 @@ Contract CarFactory(mut carId: ByteVec) {
         carContractId: ByteVec,
         model: ByteVec,
         year: U256,
-        initialPrice: U256
+        price: U256
     ) -> Car {
-        let (immFields, mutFields) = Car.encodeFields!(model, year, initialPrice)
-        carId = copyCreateContract!{callerAddress!() -> ALPH: minimalContractDeposit!()}(
+        let (immFields, mutFields) = Car.encodeFields!(model, year, price)
+        carAddress = copyCreateContract!{callerAddress!() -> ALPH: minimalContractDeposit!()}(
             carContractId, immFields, mutFields
         )
-        return Car(carId)
+        return Car(carAddress)
     }
 
     @using(preapprovedAssets = true, checkExternalCaller = false, updateFields = true)
@@ -1253,14 +1253,14 @@ Contract CarFactory(mut carId: ByteVec) {
         carContractId: ByteVec,
         model: ByteVec,
         year: U256,
-        initialPrice: U256,
+        price: U256,
         tokenAmount: U256
     ) -> Car {
-        let (immFields, mutFields) = Car.encodeFields!(model, year, initialPrice)
-        carId = copyCreateContractWithToken!{callerAddress!() -> ALPH: minimalContractDeposit!()}(
+        let (immFields, mutFields) = Car.encodeFields!(model, year, price)
+        carAddress = copyCreateContractWithToken!{callerAddress!() -> ALPH: minimalContractDeposit!()}(
             carContractId, immFields, mutFields, tokenAmount
         )
-        return Car(carId)
+        return Car(carAddress)
     }
 }
 
@@ -1282,7 +1282,7 @@ Contracts in Alephium have both immutable and mutable fields, which are stored a
 
 `copyCreateCarWithToken` is similar to `copyCreateCar`, but it also allows you to issue a specific amount of tokens for the newly created contract using the `copyCreateContractWithToken!` built-in function.
 
-In Alephium, tokens are issued through contract creation, and the token ID is exactly the same as the contract ID. By default, the issued tokens will be owned by the contract itself. However, `copyCreateContractWithToken!` provides also allows you to specify a recipient for the issued tokens.
+In Alephium, tokens are issued through contract creation, and the token ID is exactly the same as the contract ID. By default, the issued tokens will be owned by the contract itself. However, `copyCreateContractWithToken!` allows you to specify a recipient for the issued tokens.
 
 Let's test the `Car` and `CarFactory` contracts using the TypeScript code below:
 
