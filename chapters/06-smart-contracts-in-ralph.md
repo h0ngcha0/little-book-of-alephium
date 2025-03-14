@@ -1007,7 +1007,6 @@ import { CheckExternal } from '../artifacts/ts'
 
 async function test() {
   web3.setCurrentNodeProvider('http://127.0.0.1:22973')
-  const nodeProvider = web3.getCurrentNodeProvider()
 
   const signer = await getSigner()
   const { contractInstance: checkExternal } = await CheckExternal.deploy(signer, {
