@@ -634,7 +634,7 @@ import { getSigner } from '@alephium/web3-test'
 import { Counters } from '../artifacts/ts'
 
 async function test() {
-  web3.setCurrentNodeProvider('http://127.0.0.1:22973', undefined, fetch)
+  web3.setCurrentNodeProvider('http://127.0.0.1:22973')
 
   const signer = await getSigner()
   const { contractInstance: counters } = await Counters.deploy(
@@ -769,7 +769,7 @@ import { getSigner, mintToken } from '@alephium/web3-test'
 import { Burn } from '../artifacts/ts'
 
 async function test() {
-  web3.setCurrentNodeProvider('http://127.0.0.1:22973', undefined, fetch)
+  web3.setCurrentNodeProvider('http://127.0.0.1:22973')
   const nodeProvider = web3.getCurrentNodeProvider()
 
   const signer = await getSigner()
@@ -826,7 +826,7 @@ import { getSigner, mintToken } from '@alephium/web3-test'
 import { Withdraw } from '../artifacts/ts'
 
 async function test() {
-  web3.setCurrentNodeProvider('http://127.0.0.1:22973', undefined, fetch)
+  web3.setCurrentNodeProvider('http://127.0.0.1:22973')
   const nodeProvider = web3.getCurrentNodeProvider()
 
   const signer = await getSigner()
@@ -890,7 +890,7 @@ import { getSigner, mintToken } from '@alephium/web3-test'
 import { Deposit, DepositTwice } from '../artifacts/ts'
 
 async function test() {
-  web3.setCurrentNodeProvider('http://127.0.0.1:22973', undefined, fetch)
+  web3.setCurrentNodeProvider('http://127.0.0.1:22973')
   const nodeProvider = web3.getCurrentNodeProvider()
 
   const signer = await getSigner()
@@ -1077,7 +1077,7 @@ import { getSigner } from '@alephium/web3-test'
 import { FunctionCalls, Fib } from '../artifacts/ts'
 
 async function test() {
-  web3.setCurrentNodeProvider('http://127.0.0.1:22973', undefined, fetch)
+  web3.setCurrentNodeProvider('http://127.0.0.1:22973')
 
   const signer = await getSigner()
   const { contractInstance: fib } = await Fib.deploy(signer, { initialFields: {} })
@@ -3369,7 +3369,7 @@ In the integration test, the `TokenFaucet` contract is deployed to the devnet an
 ```typescript
 describe('integration tests', () => {
   beforeAll(async () => {
-    web3.setCurrentNodeProvider('http://127.0.0.1:22973', undefined, fetch)
+    web3.setCurrentNodeProvider('http://127.0.0.1:22973')
   })
 
   it('should withdraw on devnet', async () => {
