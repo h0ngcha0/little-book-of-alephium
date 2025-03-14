@@ -1008,22 +1008,34 @@ import { CheckExternal } from '../artifacts/ts'
 async function test() {
   web3.setCurrentNodeProvider('http://127.0.0.1:22973')
 
-  const signer = await getSigner()
-  const { contractInstance: checkExternal } = await CheckExternal.deploy(signer, {
-    initialFields: { owner: signer.address, value: 0n },
+  const authorizedSigner = await getSigner()
+  const unauthorizedSigner = await getSigner()
+  const { contractInstance: checkExternal } = await CheckExternal.deploy(authorizedSigner, {
+    initialFields: { owner: authorizedSigner.address, value: 0n },
   })
-
   console.assert((await checkExternal.view.getValue()).returns === 0n)
-  await checkExternal.transact.setValue({ signer, args: { v: 1n } })
+
+  // Updating value with authorized signer
+  await checkExternal.transact.setValue({ signer: authorizedSigner, args: { v: 1n } })
   console.assert((await checkExternal.view.getValue()).returns === 1n)
-  await checkExternal.transact.setValueUnsafe({ signer, args: { v: 2n } })
+
+  // Trying to update value with unauthorized signer
+  try {
+    await checkExternal.transact.setValue({ signer: unauthorizedSigner, args: { v: 2n } })
+  } catch {
+    console.log('Could not update value with unauthorized signer.')
+  }
+  console.assert((await checkExternal.view.getValue()).returns === 1n)
+
+  // Updating value with unauthorized signer using unsafe function
+  await checkExternal.transact.setValueUnsafe({ signer: unauthorizedSigner, args: { v: 2n } })
   console.assert((await checkExternal.view.getValue()).returns === 2n)
 }
 
 test()
 ```
 
-In test code above, we deploy the `CheckExternal` contract and set the initial owner to `signer.address` and initial value to `0`. We then call the `setValue` and `setValueUnsafe` functions to update the value to `1` and `2` respectively. Note that if `setValue` is not called using `signer`, transaction will abort with error code `0`.
+In test code above, we deploy the `CheckExternal` contract and set the initial owner to `authorizedSigner.address` and initial value to `0`. We then call the `setValue` and `setValueUnsafe` functions to update the value to `1` and `2` respectively. Note that if `setValue` is not called using `authorizedSigner`, transaction will abort with error code `0`.
 
 #### Function Calls
 
