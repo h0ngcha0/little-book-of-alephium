@@ -1225,9 +1225,9 @@ Contract CarFactory(mut carAddress: ByteVec) {
         carByteCode: ByteVec,
         model: ByteVec,
         year: U256,
-        initialPrice: U256
+        price: U256
     ) -> Car {
-        let (immFields, mutFields) = Car.encodeFields!(model, year, initialPrice)
+        let (immFields, mutFields) = Car.encodeFields!(model, year, price)
         carAddress = createContract!{callerAddress!() -> ALPH: minimalContractDeposit!()}(
             carByteCode, immFields, mutFields
         )
@@ -1239,9 +1239,9 @@ Contract CarFactory(mut carAddress: ByteVec) {
         carContractId: ByteVec,
         model: ByteVec,
         year: U256,
-        initialPrice: U256
+        price: U256
     ) -> Car {
-        let (immFields, mutFields) = Car.encodeFields!(model, year, initialPrice)
+        let (immFields, mutFields) = Car.encodeFields!(model, year, price)
         carAddress = copyCreateContract!{callerAddress!() -> ALPH: minimalContractDeposit!()}(
             carContractId, immFields, mutFields
         )
@@ -1253,10 +1253,10 @@ Contract CarFactory(mut carAddress: ByteVec) {
         carContractId: ByteVec,
         model: ByteVec,
         year: U256,
-        initialPrice: U256,
+        price: U256,
         tokenAmount: U256
     ) -> Car {
-        let (immFields, mutFields) = Car.encodeFields!(model, year, initialPrice)
+        let (immFields, mutFields) = Car.encodeFields!(model, year, price)
         carAddress = copyCreateContractWithToken!{callerAddress!() -> ALPH: minimalContractDeposit!()}(
             carContractId, immFields, mutFields, tokenAmount
         )
