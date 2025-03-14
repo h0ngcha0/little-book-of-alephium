@@ -1219,18 +1219,19 @@ This section will not attempt to cover the [complete list](https://docs.alephium
 Ralph provides built-in functions for contract creation, migration, and destruction. In Alephium, tokens are also issued through contract creation.
 
 ```rust
-Contract CarFactory(mut carId: ByteVec) {
+Contract CarFactory(mut carAddress: Address) {
     @using(preapprovedAssets = true, checkExternalCaller = false, updateFields = true)
     pub fn createCar(
         carByteCode: ByteVec,
         model: ByteVec,
         year: U256,
-        initialPrice: U256
+        price: U256
     ) -> Car {
-        let (immFields, mutFields) = Car.encodeFields!(model, year, initialPrice)
-        carId = createContract!{callerAddress!() -> ALPH: minimalContractDeposit!()}(
+        let (immFields, mutFields) = Car.encodeFields!(model, year, price)
+        let carId = createContract!{callerAddress!() -> ALPH: minimalContractDeposit!()}(
             carByteCode, immFields, mutFields
         )
+        carAddress = contractIdToAddress!(carId)
         return Car(carId)
     }
 
@@ -1239,12 +1240,13 @@ Contract CarFactory(mut carId: ByteVec) {
         carContractId: ByteVec,
         model: ByteVec,
         year: U256,
-        initialPrice: U256
+        price: U256
     ) -> Car {
-        let (immFields, mutFields) = Car.encodeFields!(model, year, initialPrice)
-        carId = copyCreateContract!{callerAddress!() -> ALPH: minimalContractDeposit!()}(
+        let (immFields, mutFields) = Car.encodeFields!(model, year, price)
+        let carId = copyCreateContract!{callerAddress!() -> ALPH: minimalContractDeposit!()}(
             carContractId, immFields, mutFields
         )
+        carAddress = contractIdToAddress!(carId)
         return Car(carId)
     }
 
@@ -1253,13 +1255,14 @@ Contract CarFactory(mut carId: ByteVec) {
         carContractId: ByteVec,
         model: ByteVec,
         year: U256,
-        initialPrice: U256,
+        price: U256,
         tokenAmount: U256
     ) -> Car {
-        let (immFields, mutFields) = Car.encodeFields!(model, year, initialPrice)
-        carId = copyCreateContractWithToken!{callerAddress!() -> ALPH: minimalContractDeposit!()}(
+        let (immFields, mutFields) = Car.encodeFields!(model, year, price)
+        let carId = copyCreateContractWithToken!{callerAddress!() -> ALPH: minimalContractDeposit!()}(
             carContractId, immFields, mutFields, tokenAmount
         )
+        carAddress = contractIdToAddress!(carId)
         return Car(carId)
     }
 }
