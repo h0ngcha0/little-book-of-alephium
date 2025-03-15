@@ -1354,7 +1354,7 @@ In the example above, we first deployed the `Car` contract as a template. Then w
 
 In the end, we verify that the tokens were correctly issued and owned by the last `Car` contract instance.
 
-Ralph also provides built-in ways to migrate contract code with the `migrate!()` and `migrateWithFields!()` built-in functions. This is more secure and straightforward than the traditional proxy contract pattern, as demonstrated in the example below:
+Ralph provides built-in ways to migrate contract code with the `migrate!()` and `migrateWithFields!()` built-in functions. This is more secure and straightforward than the traditional proxy contract pattern, as demonstrated in the example below:
 
 ```rust
 Contract OldCode(owner: Address, n: U256) {
@@ -1922,16 +1922,19 @@ In the example above, we defined two interfaces `Payable` and `WorkStatus`, and 
 
 
 There are couple of restrictions for interfaces:
+
 - Interfaces can only have function and event declarations, but no function implementations
 - Interfaces can not have any contract fields, constants, enums or mappings
 - Interfaces can only inherit from other interfaces, not from abstract or concrete contracts
 
 Abstract contract has less restrictions compared to interfaces:
+
 - Abstract contracts can have both function declarations and function implementations
 - Abstract contracts can have contract fields, constants, enums and mappings
 - Abstract contracts can inherit from multiple abstract contracts and implement multiple interfaces
 
 Concrete contracts are at the bottom of the inheritance hierarchy:
+
 - Concrete contracts can only have implemented functions
 - Concrete contracts can have contract fields, constants, enums and mappings
 - Concrete contracts can inherit from multiple abstract contracts and implement multiple interfaces, but concrete contracts can not be inherited by other contracts
@@ -2446,7 +2449,7 @@ Stateful UTXO model enables two types of transactions on Alephium:
 
 Transaction with smart contract interactions needs to be initiated by transaction script (`TxScript`), which is a unique and powerful feature on Alephium. `TxScript` allows developers to write re-usable or one-off logic that can compose multiple contract calls into a single transaction, without the overhead and cost of deploying new aggregation contracts. `TxScript` is also expressive and secure because it can leverage the full power of Ralph language and Alphred VM.
 
-As an example, following is the pseudo code of a TxScript that uses two DEXes to (naively) figure out the average exchange rate of USD to ALPH, and then donate $100 worth of ALPH to a charity:
+As an example, following is the pseudo code of a `TxScript` that uses two DEXes to (naively) figure out the average exchange rate of USD to ALPH, and then donate $100 worth of ALPH to a charity:
 
 ```rust
 TxScript Donate(dex1: Dex, dex2: Dex, charity: Charity) {
@@ -3148,12 +3151,13 @@ After deploying the `ALPHFaucet` and `WithdrawAmount` contracts, we test the `wi
 
 ### Debugging
 
-Ralph supports debug statements in smart contracts. Printing debug messages has the same syntax as emitting [contract events](#contract-events). Debug statements support string interpolation for easier inspection.
+Ralph supports debug statements in smart contracts. Printing debug messages has the same syntax as emitting [contract events](#contract-events). Debug messages are back-quoted, and support string interpolation for easier inspection:
 
 ```rust
 Contract Math() {
     @using(checkExternalCaller = false)
     pub fn add(x: U256, y: U256) -> U256 {
+        emit Debug(`In the add function:`)
         emit Debug(`${x} + ${y} = ${x + y}`)
         return x + y
     }
@@ -3164,6 +3168,7 @@ In the example above, the `add` function in the `Math` contract is a [view funct
 
 ```bash
 # Your contract address should be different
+> Contract @ vrcKqNuMrGpA32eUgUvAB3HBfkN4eycM5uvXukwn5SxP - In the add function:
 > Contract @ vrcKqNuMrGpA32eUgUvAB3HBfkN4eycM5uvXukwn5SxP - 1 + 2 = 3
 ```
 
@@ -3645,6 +3650,179 @@ The `payGasFee!` built-in function takes two parameters. The first one is the ga
 In the `Gasless` contract, when `payGas` function is called in a transaction, the gas fees will be paid by the caller. When `payNoGas` function is called in a transaction, all the gas fees will be paid by the contract itself.
 
 For more details on the `Gasless` contract and its test cases, refer to the [gasless](https://github.com/alephium/ralph-example/tree/master/gasless) contracts in the [Ralph Example](https://github.com/alephium/ralph-example) repository.
+
+### Calling DIA Oracle
+
+Oracles play an important role in the blockchain ecosystem by providing smart contracts with access to real world data. For example, price oracles can provide up-to-date asset prices, which are essential for DeFi applications like lending platforms, derivatives, and stablecoins. Randomness oracles can supply unpredictable values needed for gaming, lotteries, and randomized voting, etc.
+
+Alephium integrates with [DIA](https://www.diadata.org/) to support both price and randomness oracles. This section will demonstrate how to use these oracles in the Ralph smart contracts.
+
+#### Price Oracle
+
+To interact with the DIA price oracle, define an `IDIAPriceOracle` interface with the `getValue` function. This function accepts an `${Asset}/USD` query symbol (e.g., `BTC/USD`) as input and returns a data structure that contains the price with 8 decimal precision and the timestamp of the last update:
+
+```rust
+struct DIAOracleValue {
+    mut value: U256,
+    mut timestamp: U256
+  }
+
+Interface IDIAPriceOracle {
+  pub fn getValue(key: ByteVec) -> DIAOracleValue
+}
+
+Contract PriceFetcher(
+  oracle: IDIAPriceOracle,
+  mut btcPrice: U256,
+  mut ethPrice: U256,
+  mut usdcPrice: U256,
+  mut alphPrice: U256,
+  mut ayinPrice: U256
+) {
+  @using(updateFields = true, checkExternalCaller = false)
+  pub fn update() -> () {
+    btcPrice = oracle.getValue(b`BTC/USD`).value
+    ethPrice = oracle.getValue(b`ETH/USD`).value
+    usdcPrice = oracle.getValue(b`USDC/USD`).value
+    alphPrice = oracle.getValue(b`ALPH/USD`).value
+    ayinPrice = oracle.getValue(b`AYIN/USD`).value
+  }
+}
+```
+
+In the example above, the `update` function in the `PriceFetcher` contract retrieves and updates the asset prices by calling the `getValue` function from the `IDIAPriceOracle` interface. The following TypeScript code demonstrates how to test the `PriceFetcher` contract on the `testnet`:
+
+```typescript
+import { web3, waitForTxConfirmation, contractIdFromAddress, binToHex } from '@alephium/web3'
+import { PriceFetcher } from '../artifacts/ts'
+import { PrivateKeyWallet } from '@alephium/web3-wallet'
+
+async function test() {
+  web3.setCurrentNodeProvider('https://node.testnet.alephium.org')
+
+  const privateKey = process.env.PRIVATE_KEY || (
+    () => { throw new Error("PRIVATE_KEY environment variable is not set") }
+  )()
+  const wallet = new PrivateKeyWallet({ privateKey })
+
+  const oracleContractAddress = '216wgM3Xi5uBFYwwiw2T7iZoCy9vozPJ4XjToW74nQjbV'
+  const oracleContractId = binToHex(contractIdFromAddress(oracleContractAddress))
+  const deployResult = await PriceFetcher.deploy(wallet, {
+     initialFields: {
+        oracle: oracleContractId,
+        btcPrice: 0n,
+        ethPrice: 0n,
+        usdcPrice: 0n,
+        alphPrice: 0n,
+        ayinPrice: 0n
+     }
+  })
+  const priceFetcher = deployResult.contractInstance
+  await waitForTxConfirmation(deployResult.txId, 1, 1000)
+
+  const updateResult = await priceFetcher.transact.update({ signer: wallet })
+  await waitForTxConfirmation(updateResult.txId, 1, 1000)
+
+  const state = await priceFetcher.fetchState()
+  console.log('BTC Price:', state.fields.btcPrice)
+  console.log('ETH Price:', state.fields.ethPrice)
+  console.log('USDC Price:', state.fields.usdcPrice)
+  console.log('ALPH Price:', state.fields.alphPrice)
+  console.log('AYIN Price:', state.fields.ayinPrice)
+}
+
+test()
+```
+
+If we set the `PRIVATE_KEY` environment variable with your testnet wallet's private key, the `test` function will deploy the `PriceFetcher` contract and update the asset prices. The following is an example output of the `test` function:
+
+```typescript
+BTC Price: 8425960054567n
+ETH Price: 194063943017n
+USDC Price: 99992084n
+ALPH Price: 33374551n
+AYIN Price: 48406126n
+```
+
+`216wgM3Xi5uBFYwwiw2T7iZoCy9vozPJ4XjToW74nQjbV` is the address of the DIA price oracle on the `testnet`. Its `mainnet` address is `285zrkZTPpUCpjKg9E3z238VmpUBQEAbESGsJT6yX7Rod`. For more details about the DIA price oracle, including the supported price feeds, please refer to the [DIA price oracle](https://docs.alephium.org/infrastructure/Oracles/#price-oracles) documentation.
+
+
+#### Randomness Oracle
+
+To interact with the DIA randomness oracle, define an `IDIARandomOracle` interface with the `getLastRound` and `getRandomValue` functions. Round is a unique identifier for a set of published random values managed by the DIA randomness oracle. The `getLastRound` function returns the last round number, and the `getRandomValue` function returns a data structure that contains the randomness value, the BLS signature, and the round number:
+
+```rust
+struct DIARandomValue {
+    mut randomness: ByteVec,
+    mut signature: ByteVec,
+    mut round: U256
+}
+
+Interface IDIARandomOracle {
+    pub fn getLastRound() -> U256
+    pub fn getRandomValue(round: U256) -> DIARandomValue
+}
+
+Contract RandomnessFetcher(
+  oracle: IDIARandomOracle,
+  mut randomValue: DIARandomValue
+) {
+  @using(updateFields = true, checkExternalCaller = false)
+  pub fn update() -> () {
+    let lastRound = oracle.getLastRound()
+    let value = oracle.getRandomValue(lastRound)
+    randomValue = value
+  }
+}
+```
+
+In the example above, the `update` function in the `RandomnessFetcher` contract retrieves and updates the randomness value by calling the `getLastRound` and `getRandomValue` functions from the `IDIARandomOracle` interface. The following TypeScript code demonstrates how to test the `RandomnessFetcher` contract on the `testnet`:
+
+```typescript
+import { web3, waitForTxConfirmation, contractIdFromAddress, binToHex } from '@alephium/web3'
+import { RandomnessFetcher } from '../artifacts/ts'
+import { PrivateKeyWallet } from '@alephium/web3-wallet'
+
+async function test() {
+  web3.setCurrentNodeProvider('https://node.testnet.alephium.org')
+
+  const privateKey = process.env.PRIVATE_KEY || (
+    () => { throw new Error("PRIVATE_KEY environment variable is not set") }
+  )()
+  const wallet = new PrivateKeyWallet({ privateKey })
+
+  const oracleContractAddress = '217k7FMPgahEQWCfSA1BN5TaxPsFovjPagpujkyxKDvS3'
+  const oracleContractId = binToHex(contractIdFromAddress(oracleContractAddress))
+  const deployResult = await RandomnessFetcher.deploy(wallet, {
+     initialFields: {
+        oracle: oracleContractId,
+        randomValue: { randomness: "", signature: "", round: 0n }
+     }
+  })
+  const randomnessFetcher = deployResult.contractInstance
+  await waitForTxConfirmation(deployResult.txId, 1, 1000)
+
+  const updateResult = await randomnessFetcher.transact.update({ signer: wallet })
+  await waitForTxConfirmation(updateResult.txId, 1, 1000)
+
+  const state = await randomnessFetcher.fetchState()
+  console.log('randomValue:', state.fields.randomValue)
+}
+
+test()
+```
+
+If we set the `PRIVATE_KEY` environment variable with your testnet wallet's private key, the test code above will deploy the `RandomnessFetcher` contract and update the randomness value. The following is an example output of the `test` function:
+
+```typescript
+randomValue: {
+  randomness: 'fc629838e6e727e770f98d2d319fa3abd4c529c948aac579f08b48f57355e9af',
+  signature: 'a0b12f0dbc86da43b92e3a44557a3687b88e6087c7dc3ffc5f627b0e7191b8addd15fa919882e29257b06dc5111e1c44176a44ecb39c36fc0c6d4e29cf22604ecc7c873d63c487992f4d82de7478ac34c211a1001ad9eb399d9fe39f24c1df21',
+  round: 4888094n
+}
+```
+
+`217k7FMPgahEQWCfSA1BN5TaxPsFovjPagpujkyxKDvS3` is the address of the DIA randomness oracle on the `testnet`. Its `mainnet` address is `v1v4cBXP9L7M9ryZZCx7tuXuNb9pnDLGb3JJkPBpbR1Z`. For more details about the DIA randomness oracle, please refer to the [DIA randomness oracle](https://docs.alephium.org/infrastructure/Oracles/#randomness-oracles) documentation.
 
 ### More Resources
 
