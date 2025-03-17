@@ -1362,7 +1362,6 @@ Contract OldCode(owner: Address, n: U256) {
         return n
     }
 
-    @using(checkExternalCaller = false)
     pub fn migrate(newCode: ByteVec) -> () {
         checkCaller!(callerAddress!() == owner, 0)
         migrate!(newCode)
