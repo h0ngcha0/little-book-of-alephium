@@ -1421,7 +1421,7 @@ async function test() {
     args: { newCode: NewCode.contract.bytecode, immFields, mutFields }
   })
 
-  const newContract = await NewCode.at(oldCode.address)
+  const newContract = NewCode.at(oldCode.address)
   const {returns: newN} = await newContract.view.get()
   console.assert(newN === 200n)
 
