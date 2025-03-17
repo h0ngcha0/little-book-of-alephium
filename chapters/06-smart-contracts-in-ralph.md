@@ -1770,7 +1770,7 @@ import { getSigner } from '@alephium/web3-test'
 import { MyToken, MyTokenTypes } from '../artifacts/ts'
 
 async function test() {
-  const nodeProvider = new NodeProvider("http://localhost:22973")
+  const nodeProvider = new NodeProvider("http://127.0.0.1:22973")
   const signer = await getSigner()
 
   const { contractInstance: myToken } = await MyToken.deploy(
@@ -1810,10 +1810,10 @@ async function test() {
   })
 
   await sleep(1000)
-  console.assert(transferEvent?.contractAddress === myToken.address, "xx")
-  console.assert(transferEvent?.fields.amount === 100n, "yy")
-  console.assert(transferEvent?.fields.to === signer.address, "zz")
-  console.assert(transferEvent?.fields.version === 0n, "vv")
+  console.assert(transferEvent?.contractAddress === myToken.address)
+  console.assert(transferEvent?.fields.amount === 100n)
+  console.assert(transferEvent?.fields.to === signer.address)
+  console.assert(transferEvent?.fields.version === 0n)
 
   process.exit(0)
 }
