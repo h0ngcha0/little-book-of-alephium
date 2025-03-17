@@ -1722,7 +1722,7 @@ Contracts in Ralph serve as the fundamental building blocks for smart contract d
 - **Enums**: User defined data type consisting of a fixed set of named constants
 - **Functions**: Defines executable logic and behavior of the contract
 
-Contracts are identified by their unique contract ids, which can be converted 1-to-1 to contract addresses. In Alephium, tokens are issued through contract creation, and the token ID is identical to the ID of the contract that issued it.
+Contracts are identified by their unique contract IDs, which can be converted 1-to-1 to contract addresses. In Alephium, tokens are issued through contract creation, and the token ID is identical to the ID of the contract that issued it.
 
 ```rust
 Contract MyToken(name: ByteVec, mut owner: Address) {
@@ -1833,7 +1833,7 @@ As we explored in the [Sub Contract Functions](#sub-contract-functions) section,
 
 Like regular contracts, sub contracts require a deposit that gets returned when destroyed. This incentivizes recycling unused sub contracts to prevent state bloat. Alephium's maps leverage this same sub contract system and inherit these properties.
 
-The key to understand the sub contracts system lies in how contract ids are constructed. For regular contracts, the contract ID is derived by combining the transaction id that created the contract, the index of the contract creation output within that transaction, and the contract's group number using the following formula:
+The key to understand the sub contracts system lies in how contract IDs are constructed. For regular contracts, the contract ID is derived by combining the transaction ID that created the contract, the index of the contract creation output within that transaction, and the contract's group number using the following formula:
 
 ```
 contractId = dropRight(blake2b(txId || output index), 1) || group number
@@ -1849,9 +1849,9 @@ subContractId = dropRight(blake2b(blake2b(parentContractId || subContractPath)),
 
 The parent contract's ID and the sub contract's path value are concatenated and double hashed using the `Blake2b` hash function. The last byte of the hash is also replaced with the group number to get the final sub contract ID. This embedded group number for both regular and sub contracts makes it possible for the `groupOfAddress` function in Ralph and Web3 SDK to determine a contract's group number from its address.
 
-The way that the sub contract ID is constructed allows easy navigation from parent to child contracts. Both Ralph and the Web3 SDK provide functions like `subContractId` and `subContractIdOf` to derive sub contract ids from parent contract ids and path values.
+The way that the sub contract ID is constructed allows easy navigation from parent to child contracts. Both Ralph and the Web3 SDK provide functions like `subContractId` and `subContractIdOf` to derive sub contract IDs from parent contract IDs and path values.
 
-Sub contracts provide a powerful abstraction for building complex smart contract systems. For example, an NFT collection can be implemented as a parent contract with individual NFTs as sub contracts using the NFT's index as the path value. This design enables easy navigation between collection and specific NFTs, and allows each NFT to manage its state and asset independently. Similarly, a DEX can organize token pools as sub contracts with token ids from the token pair as path values, this approach allows each pool to maintain its own state and assets while remaining discoverable through the main DEX contract. Well-designed smart contracts using sub contracts create modular, maintainable systems with clear responsibilities.
+Sub contracts provide a powerful abstraction for building complex smart contract systems. For example, an NFT collection can be implemented as a parent contract with individual NFTs as sub contracts using the NFT's index as the path value. This design enables easy navigation between collection and specific NFTs, and allows each NFT to manage its state and asset independently. Similarly, a DEX can organize token pools as sub contracts with token IDs from the token pair as path values, this approach allows each pool to maintain its own state and assets while remaining discoverable through the main DEX contract. Well-designed smart contracts using sub contracts create modular, maintainable systems with clear responsibilities.
 
 Please refer to the built-in [Sub-contracts Functions](#sub-contract-functions) section for a concrete example of how to create and interact with sub contracts.
 
