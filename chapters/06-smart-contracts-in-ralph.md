@@ -384,7 +384,7 @@ Each address type is followed by a specific content bytes format:
 - `P2PKH` - serialized public key hash
 - `P2MPKH` - serialized public key hashes and multisig threshold
 - `P2SH` - serialized script hash
-- `P2C` - serialized contract id
+- `P2C` - serialized contract ID
 
 The complete address in bytes is constructed by concatenating the address type and the content bytes:
 
@@ -791,7 +791,7 @@ async function test() {
 test()
 ```
 
-`mintToken` is a helper function from the Web3 SDK to mint a token and transfer to a specific address. In the example above, we minted a token with id `tokenId` and transferred `10` of it to `signer.address`.
+`mintToken` is a helper function from the Web3 SDK to mint a token and transfer to a specific address. In the example above, we minted a token with ID `tokenId` and transferred `10` of it to `signer.address`.
 
 When calling the `main` function in the `Burn` contract, we pass in the `tokenId` as argument and approve 1 token from the signer. After calling the `main` function, the token balance of the signer's address goes from `10` to `9`.
 
@@ -1094,7 +1094,7 @@ async function test() {
 test()
 ```
 
-Note that we deployed the `Fib` contract first and then passed its contract id to the `FunctionCalls` contract. The result of running the `runFib` function with `n = 10` is `55`.
+Note that we deployed the `Fib` contract first and then passed its contract ID to the `FunctionCalls` contract. The result of running the `runFib` function with `n = 10` is `55`.
 
 ##### Asset Approval
 
@@ -1446,7 +1446,7 @@ Alephium supports a unique and powerful feature called sub contracts. This featu
 
 Sub contracts system also contributes to the long-term health of the Alephium blockchain by incentivizing users to recycle them when not needed. It also keeps things simple and elegant at the VM level since everything is a contract. Maps in Alephium is implemented on top of the sub contracts system.
 
-Alephium supports a set of built-in functions to create sub contracts and calculate sub contract id. Since sub contracts are also contracts, all other contract built-in functions can be used on them as well.
+Alephium supports a set of built-in functions to create sub contracts and calculate sub contract ID. Since sub contracts are also contracts, all other contract built-in functions can be used on them as well.
 
 ```rust
 Contract Domain(url: ByteVec, subDomainTemplateId: ByteVec) {
@@ -1641,13 +1641,13 @@ The `UtilsFunctions` contract demonstrates several utility functions available i
 - `isAssetAddress!(address)`: Checks if an address is a user address
 - `isContractAddress!(address)`: Checks if an address is a contract address
 - `len!(array)`: Returns the length of an fixed-sized array
-- `nullContractAddress!()`: Returns the null contract address which is useful to set a default value for a contract field. Its corresponding contract id is `#0000000000000000000000000000000000000000000000000000000000000000`
+- `nullContractAddress!()`: Returns the null contract address which is useful to set a default value for a contract field. Its corresponding contract ID is `#0000000000000000000000000000000000000000000000000000000000000000`
 - `minimalContractDeposit!()`: Returns the minimum deposit required to create a contract
 - `mapEntryDeposit!()`: Returns the deposit required for each new map entry
 
 ###### Chain Functions
 
-Ralph provides a set of built-in functions that allow the contract to get the chain and transaction information, such as the current block timestamp, block target, transaction id, transactin inputs, gas info, and more.
+Ralph provides a set of built-in functions that allow the contract to get the chain and transaction information, such as the current block timestamp, block target, transaction ID, transactin inputs, gas info, and more.
 
 ```rust
 TxScript Chain {
@@ -1664,7 +1664,7 @@ TxScript Chain {
 }
 ```
 
-As we can see in the example above, the `Chain` transaction script uses the built-in functions to emit the current block timestamp, block target, transaction id, transactin inputs, gas fee and amount, and more.
+As we can see in the example above, the `Chain` transaction script uses the built-in functions to emit the current block timestamp, block target, transaction ID, transactin inputs, gas fee and amount, and more.
 
 `dustAmount!()` returns the minimal amount of ALPH required per UTXO (currently 0.001 ALPH). This prevents the creation of tiny UTXOs that would increase blockchain storage and processing overhead.
 
@@ -1720,7 +1720,7 @@ Contracts in Ralph serve as the fundamental building blocks for smart contract d
 - **Enums**: User defined data type consisting of a fixed set of named constants
 - **Functions**: Defines executable logic and behavior of the contract
 
-Contracts are identified by their unique contract ids, which can be converted 1-to-1 to contract addresses. In Alephium, tokens are issued through contract creation, and the token id is identical to the id of the contract that issued it.
+Contracts are identified by their unique contract ids, which can be converted 1-to-1 to contract addresses. In Alephium, tokens are issued through contract creation, and the token ID is identical to the ID of the contract that issued it.
 
 ```rust
 Contract MyToken(name: ByteVec, mut owner: Address) {
@@ -1815,7 +1815,7 @@ async function test() {
 test()
 ```
 
-In the example above, first we deployed the `MyToken` contract and issued `1000` tokens to itself. We then used the `addressFromContractId` and `contractIdFromAddress` functions from the Web3 SDK to verify that the contract address and contract id is 1-to-1 convertible, and the issued token id is the same as the contract id.
+In the example above, first we deployed the `MyToken` contract and issued `1000` tokens to itself. We then used the `addressFromContractId` and `contractIdFromAddress` functions from the Web3 SDK to verify that the contract address and contract ID is 1-to-1 convertible, and the issued token ID is the same as the contract ID.
 
 To call a read-only function, we use the `view` property of the contract instance, as shown by `myToken.view.getName()`. View functions query contract data without requiring gas fees.
 
@@ -1831,23 +1831,23 @@ As we explored in the [Sub Contract Functions](#sub-contract-functions) section,
 
 Like regular contracts, sub contracts require a deposit that gets returned when destroyed. This incentivizes recycling unused sub contracts to prevent state bloat. Alephium's maps leverage this same sub contract system and inherit these properties.
 
-The key to understand the sub contracts system lies in how contract ids are constructed. For regular contracts, the contract id is derived by combining the transaction id that created the contract, the index of the contract creation output within that transaction, and the contract's group number using the following formula:
+The key to understand the sub contracts system lies in how contract ids are constructed. For regular contracts, the contract ID is derived by combining the transaction id that created the contract, the index of the contract creation output within that transaction, and the contract's group number using the following formula:
 
 ```
 contractId = dropRight(blake2b(txId || output index), 1) || group number
 ```
 
-The transaction id and the output index are concatenated and hashed using the `Blake2b` hash function. The last byte of the hash is then replaced with the group number to get the final contract id.
+The transaction ID and the output index are concatenated and hashed using the `Blake2b` hash function. The last byte of the hash is then replaced with the group number to get the final contract ID.
 
-For sub contracts, the contract id is derived by the parent contract's id and a unique `ByteVec` path value that identifies the sub contract under its parent. This ensures that each sub contract has a globally unique identifier as well.
+For sub contracts, the contract ID is derived by the parent contract's ID and a unique `ByteVec` path value that identifies the sub contract under its parent. This ensures that each sub contract has a globally unique identifier as well.
 
 ```
 subContractId = dropRight(blake2b(blake2b(parentContractId || subContractPath)), 1) || group number
 ```
 
-The parent contract's id and the sub contract's path value are concatenated and double hashed using the `Blake2b` hash function. The last byte of the hash is also replaced with the group number to get the final sub contract id. This embedded group number for both regular and sub contracts makes it possible for the `groupOfAddress` function in Ralph and Web3 SDK to determine a contract's group number from its address.
+The parent contract's ID and the sub contract's path value are concatenated and double hashed using the `Blake2b` hash function. The last byte of the hash is also replaced with the group number to get the final sub contract ID. This embedded group number for both regular and sub contracts makes it possible for the `groupOfAddress` function in Ralph and Web3 SDK to determine a contract's group number from its address.
 
-The way that the sub contract id is constructed allows easy navigation from parent to child contracts. Both Ralph and the Web3 SDK provide functions like `subContractId` and `subContractIdOf` to derive sub contract ids from parent contract ids and path values.
+The way that the sub contract ID is constructed allows easy navigation from parent to child contracts. Both Ralph and the Web3 SDK provide functions like `subContractId` and `subContractIdOf` to derive sub contract ids from parent contract ids and path values.
 
 Sub contracts provide a powerful abstraction for building complex smart contract systems. For example, an NFT collection can be implemented as a parent contract with individual NFTs as sub contracts using the NFT's index as the path value. This design enables easy navigation between collection and specific NFTs, and allows each NFT to manage its state and asset independently. Similarly, a DEX can organize token pools as sub contracts with token ids from the token pair as path values, this approach allows each pool to maintain its own state and assets while remaining discoverable through the main DEX contract. Well-designed smart contracts using sub contracts create modular, maintainable systems with clear responsibilities.
 
@@ -1872,7 +1872,7 @@ Abstract Contract Employee(name: ByteVec, id: U256) {
         return name
     }
     pub fn getId() -> U256 {
-        return id
+        return ID
     }
 }
 
@@ -1976,7 +1976,7 @@ For example, the fungible token standard and non-fungible token standard ensure 
 
 These standard interfaces can also improve composability between contracts. For example, a lending protocol can integrate with any oracle that implements the standard oracle interface, without requiring custom code for each oracle implementation.
 
-Standard interfaces in Alephium are defined in the Web3 SDK. They are all annotated using `@std` with a unique id, which is compiled as an implicit field for the inheriting contracts. This annotation enables wallets and dApps to automatically detect standard compliant contracts. Alephium currently supports two primary categories of standards: fungible token standard and non-fungible token standard.
+Standard interfaces in Alephium are defined in the Web3 SDK. They are all annotated using `@std` with a unique ID, which is compiled as an implicit field for the inheriting contracts. This annotation enables wallets and dApps to automatically detect standard compliant contracts. Alephium currently supports two primary categories of standards: fungible token standard and non-fungible token standard.
 
 ###### Fungible Token Standard
 
@@ -1993,7 +1993,7 @@ Interface IFungibleToken {
 }
 ```
 
-The `@std(id = #0001)` annotation indicates that the fungible token standard id is `0001`. The `@using(methodSelector = false)` annotation is used to disable method selector as the mechanism of calling the interface functions in preference to method indexes. We will cover this with more details later.
+The `@std(id = #0001)` annotation indicates that the fungible token standard ID is `0001`. The `@using(methodSelector = false)` annotation is used to disable method selector as the mechanism of calling the interface functions in preference to method indexes. We will cover this with more details later.
 
 Here is a concrete example of a contract that implements the fungible token standard:
 
@@ -2067,7 +2067,7 @@ Non-Fungible Tokens (NFTs) are unique digital assets that represent ownership of
 
 In Alephium, NFT contracts are typically modeled as sub contracts of NFT collection contracts. Alephium provides standard interfaces for both NFT and NFT collection contracts, making them easily discoverable and interoperable across wallets, marketplaces, and various decentralized applications.
 
-For NFT collections, the standard interface is `INFTCollection` with `@std` id `0002` associated with it. The `INFTCollection` interface defines the standard methods that all NFT collection contracts should implement:
+For NFT collections, the standard interface is `INFTCollection` with `@std` ID `0002` associated with it. The `INFTCollection` interface defines the standard methods that all NFT collection contracts should implement:
 
 ```rust
 import "std/nft_interface"
@@ -2107,7 +2107,7 @@ The `getCollectionUri` function returns a URI that points to a JSON file contain
 
 `totalSupply` function returns the total number of NFTs in the collection. `nftByIndex` function returns the NFT at the given index. `validateNFT` function validates that the given NFT is part of the collection, otherwise it should fail with an error.
 
-To support royalties for a NFT collection, a standard interface called `INFTCollectionWithRoyalty` was introduced with `@std` id `000201`.
+To support royalties for a NFT collection, a standard interface called `INFTCollectionWithRoyalty` was introduced with `@std` ID `000201`.
 
 ```rust
 import "std/nft_collection_interface"
@@ -2130,9 +2130,9 @@ Interface INFTCollectionWithRoyalty extends INFTCollection {
 - `payRoyalty`: Pays the royalty amount from the `payer`
 - `withdrawRoyalty`: Withdraws the royalty amount to the `to` address
 
-Note that the `std` id `000201` for `INFTCollectionWithRoyalty` uses `0002` as prefix to indicate that it is an extension of `INFTCollection`.
+Note that the `std` ID `000201` for `INFTCollectionWithRoyalty` uses `0002` as prefix to indicate that it is an extension of `INFTCollection`.
 
-For NFT contracts, the standard interface is `INFT` with `@std` id `0003`. It defines the standard methods that all NFT contracts should implement:
+For NFT contracts, the standard interface is `INFT` with `@std` ID `0003`. It defines the standard methods that all NFT contracts should implement:
 
 ```rust
 @std(id = #0003)
@@ -2185,7 +2185,7 @@ Interface INFT {
 }
 ```
 
-`getCollectionIndex` function returns the collection id and the index of the NFT in the collection.
+`getCollectionIndex` function returns the collection ID and the index of the NFT in the collection.
 
 In the following example, `AwesomeNFTCollection` is an NFT collection contract and `AwesomeNFT` is an NFT contract. Both of them conform to the standard interfaces:
 
@@ -2263,9 +2263,9 @@ Contract AwesomeNFT(
 }
 ```
 
-The `AwesomeNFTCollection` contract implements the standard NFT collection interface. It stores collection metadata through a URI and tracks the total supply of NFTs in the collection. The contract uses a template contract id for `AwesomeNFT` to mint individual NFTs as sub contracts, with each NFT having its index as sub contract path. The sub contract system maintains the relationship between the collection and its NFTs, allowing `AwesomeNFTCollection` contract to properly validate and retrieve NFTs within the collection using the `validateNFT` and `nftByIndex` functions.
+The `AwesomeNFTCollection` contract implements the standard NFT collection interface. It stores collection metadata through a URI and tracks the total supply of NFTs in the collection. The contract uses a template contract ID for `AwesomeNFT` to mint individual NFTs as sub contracts, with each NFT having its index as sub contract path. The sub contract system maintains the relationship between the collection and its NFTs, allowing `AwesomeNFTCollection` contract to properly validate and retrieve NFTs within the collection using the `validateNFT` and `nftByIndex` functions.
 
-The `AwesomeNFT` contract implements the standard NFT interface. It stores NFT metadata through a URI and returns the collection id and the index of the NFT in the collection.
+The `AwesomeNFT` contract implements the standard NFT interface. It stores NFT metadata through a URI and returns the collection ID and the index of the NFT in the collection.
 
 Now let's see how to deploy and interact with the `AwesomeNFTCollection` and `AwesomeNFT` contracts using the Web3 SDK:
 
@@ -2330,9 +2330,9 @@ async function test() {
 test()
 ```
 
-In this example, we deploy an `AwesomeNFT` template contract, then use its id to deploy the `AwesomeNFTCollection` contract. We verify it implements the standard NFT collection interface (id `0002`) using `guessStdInterfaceId`, and confirm its metadata is correctly initialized with `fetchNFTCollectionMetaData`.
+In this example, we deploy an `AwesomeNFT` template contract, then use its ID to deploy the `AwesomeNFTCollection` contract. We verify it implements the standard NFT collection interface (id `0002`) using `guessStdInterfaceId`, and confirm its metadata is correctly initialized with `fetchNFTCollectionMetaData`.
 
-Next, we mint an NFT to the collection and derive its contract id using `subContractId`. We verify it implements the standard NFT interface (id `0003`), confirm its token type is `non-fungible`, and validate its metadata with `fetchNFTMetaData`.
+Next, we mint an NFT to the collection and derive its contract ID using `subContractId`. We verify it implements the standard NFT interface (id `0003`), confirm its token type is `non-fungible`, and validate its metadata with `fetchNFTMetaData`.
 
 
 #### Interact with Contracts
@@ -2350,7 +2350,7 @@ Interactions with deployed contracts can be divided into two categories based on
 
    - Require gas fees for execution
    - Are executed only when transactions are mined on the blockchain
-   - Return only the transaction id to the caller
+   - Return only the transaction ID to the caller
 
 Interacting with contracts directly through the full node API can be tedious and error-prone. The Web3 SDK simplifies this process by automatically generating wrapper code for contracts and transaction scripts. This generated code provides intellisense support in modern IDEs, handles parameter encoding/decoding, and manages the complexities of contract interactions, allowing developers to focus on building their applications rather than dealing with low-level implementation details.
 
@@ -2436,7 +2436,7 @@ async function getTokenBalance(address: string) {
 
 console.assert(await getTokenBalance(myToken.address) === "1000")
 const result = await myToken.transact.withdraw({ signer, attoAlphAmount: DUST_AMOUNT })
-console.log('transaction id', result.txId)
+console.log('transaction ID', result.txId)
 
 console.assert(await getTokenBalance(myToken.address) === "900")
 console.assert(await getTokenBalance(signer.address) === "100")
@@ -2444,7 +2444,7 @@ console.assert(await getTokenBalance(signer.address) === "100")
 
 We define a helper function `getTokenBalance` to get the balance of `MyToken` for a given address. Then we call the `myToken.transact.withdraw` function to withdraw `100` of `MyToken` for the signer. After the transaction is executed, we verify the balance of `MyToken` for the token contract and the `signer` address are updated correctly.
 
-Note that the `myToken.transact.withdraw` function doesn't return the result immediately, instead it returns the transaction information such as transaction id, gas used, unsigned transaction, and signature, etc. The execution only takes effect after the transaction is successfully mined on the blockchain.
+Note that the `myToken.transact.withdraw` function doesn't return the result immediately, instead it returns the transaction information such as transaction ID, gas used, unsigned transaction, and signature, etc. The execution only takes effect after the transaction is successfully mined on the blockchain.
 
 ##### Transaction Scripts
 
@@ -2510,7 +2510,7 @@ An event object in Alephium consists of the following attributes:
 
 | Field            | Description                                                                           |
 |------------------|---------------------------------------------------------------------------------------|
-| txId             | transaction id                                                                        |
+| txId             | transaction ID                                                                        |
 | blockHash        | block hash                                                                            |
 | contractAddress  | address of the emitting contract / special address for system events|
 | eventIndex       | index of the event in the emitting contract / special index for system events        |
@@ -2618,7 +2618,7 @@ subscribeContractCreatedEvent({
 }, 0)
 ```
 
-In the `ContractCreatedEvent` event object, `eventIndex` is set to `-1` (a special reserved value for this system event), `contractAddress` is a unique and deterministic value calculated from the contract group and event index, and `fields` contains both the address of the newly created contract and its parent contract id (when applicable). This information is useful for indexers and other off-chain applications to track new contract deployments and their relationships to existing contracts.
+In the `ContractCreatedEvent` event object, `eventIndex` is set to `-1` (a special reserved value for this system event), `contractAddress` is a unique and deterministic value calculated from the contract group and event index, and `fields` contains both the address of the newly created contract and its parent contract ID (when applicable). This information is useful for indexers and other off-chain applications to track new contract deployments and their relationships to existing contracts.
 
 ###### ContractDestroyedEvent
 
@@ -2981,7 +2981,7 @@ Contract WithdrawAmount(mut value: U256) {
 }
 ```
 
-To test the `increaseWithdrawAmount` function in the `ALPHFaucet` contract, we begin by creating the initial state for `WithdrawAmount` contract using the `stateForTest` method and set it up as a dependency for the test using the `existingContracts` field. We also use the contract id for `WithdrawAmount` to initialize the fields for the `ALPHFaucet` contract.
+To test the `increaseWithdrawAmount` function in the `ALPHFaucet` contract, we begin by creating the initial state for `WithdrawAmount` contract using the `stateForTest` method and set it up as a dependency for the test using the `existingContracts` field. We also use the contract ID for `WithdrawAmount` to initialize the fields for the `ALPHFaucet` contract.
 
 ```typescript
 const withdrawAmount = WithdrawAmount.stateForTest({value: ONE_ALPH})
@@ -3528,7 +3528,7 @@ For each of the networks, we can specify the following parameters: The `nodeUrl`
 To deploy the contract to devnet, we can run the following command:
 
 ```bash
-# Your contract address and contract id will be different
+# Your contract address and contract ID will be different
 $ npx @alephium/cli deploy
 ...
 Deploying contract TokenFaucet
