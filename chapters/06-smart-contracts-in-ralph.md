@@ -1407,8 +1407,8 @@ import { OldCode, NewCode } from '../artifacts/ts'
 
 async function test() {
   const signer = await getSigner()
-  const { contractInstance: oldCode } = await OldCode.deploy(signer, {
-     initialFields: { owner: signer.address, n: 100n }
+  const { contractInstance: oldContract } = await OldCode.deploy(signer, {
+    initialFields: { owner: signer.address, n: 100n }
   })
 
   const {encodedImmFields, encodedMutFields} = NewCode.encodeFields({
@@ -1416,18 +1416,21 @@ async function test() {
   })
   const immFields = binToHex(encodedImmFields)
   const mutFields = binToHex(encodedMutFields)
-  await oldCode.transact.migrateWithFields({
+  await oldContract.transact.migrateWithFields({
     signer,
     args: { newCode: NewCode.contract.bytecode, immFields, mutFields }
   })
 
-  const newContract = NewCode.at(oldCode.address)
-  const {returns: newN} = await newContract.view.get()
+  const newContract = NewCode.at(oldContract.address)
+  let newN = (await newContract.view.get()).returns
   console.assert(newN === 200n)
 
-  await newContract.transact.set({signer, args: {m: 300n}})
-  const {returns: newN2} = await newContract.view.get()
-  console.assert(newN2 === 300n)
+  await newContract.transact.set({ signer, args: { m: 300n } })
+  newN = (await newContract.view.get()).returns
+  console.assert(newN === 300n)
+
+  newN = (await oldContract.view.get()).returns
+  console.assert(newN === 300n)
 
   await newContract.transact.destroy({signer})
 }
