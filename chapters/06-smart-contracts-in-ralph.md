@@ -1299,7 +1299,7 @@ import { Car, CarFactory } from '../artifacts/ts'
 
 async function test() {
   web3.setCurrentNodeProvider('http://127.0.0.1:22973')
-  const nodeProvider = new NodeProvider('http://127.0.0.1:22973')
+  const nodeProvider = web3.getCurrentNodeProvider()
 
   const signer = await getSigner()
   const carInfos = { model: stringToHex('Toyota'), year: 2020n, price: 10000n }
