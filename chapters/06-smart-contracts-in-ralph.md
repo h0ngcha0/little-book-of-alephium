@@ -3640,7 +3640,7 @@ For more details on the `DynamicArrayForInt` contract and its test cases, refer 
 
 ### Gasless Transactions
 
-In Ralph, we can use the built-in `payGasFee` built-in function to allow a different user or contract to pay either part or all of the gas fees on behalf of the caller. The business logic of who should pay the gas fee is completely programmable.
+In Ralph, we can use the `payGasFee` built-in function to allow a different user or contract to pay either part or all of the gas fees on behalf of the caller. The business logic of who should pay the gas fee is completely programmable.
 
 ```rust
 Contract Gasless() {
