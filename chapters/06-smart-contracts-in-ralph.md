@@ -2599,7 +2599,7 @@ Compared to the contract events, which are defined and emitted explicitly from t
 
 ```rust
 TxScript Deploy(fooByteCode: ByteVec) {
-  createContract!{callerAddress!() -> ALPH: 1 ALPH}(fooByteCode, #00, #00)
+  createContract!{callerAddress!() -> ALPH: minimalContractDeposit!()}(fooByteCode, #00, #00)
 }
 ```
 
