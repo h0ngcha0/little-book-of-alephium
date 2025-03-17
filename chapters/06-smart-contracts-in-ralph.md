@@ -1825,7 +1825,7 @@ In the example above, first we deployed the `MyToken` contract and issued `1000`
 
 To call a read-only function, we use the `view` property of the contract instance, as shown by `myToken.view.getName()`. View functions query contract data without requiring gas fees.
 
-To call a function that updates the contract fields or transfer assets, we need to start a transaction by using the `transact` property of the contract instance, as shown by `myToken.transact.withdraw()`. This will require the caller to pay gas fees. After the transaction is submitted, we verify that the balance for token balance for the owner and the contract are updated as expected.
+To call a function that updates the contract fields or transfer assets, we need to start a transaction by using the `transact` property of the contract instance, as shown by `myToken.transact.withdraw()`. This will require the caller to pay gas fees. After the transaction is submitted, we verify that the token balance for the owner and the contract are updated as expected.
 
 Finally, we demonstrate event handling capabilities. Since the `withdraw` function emits a `Transfer` event, we can subscribe to and verify these events. The Web3 SDK automatically generates event-specific subscription methods, in this case `subscribeTransferEvent`, for each event type defined in the contract. After waiting briefly to allow block confirmation, we verify that the emitted event contains the expected data by checking the event fields like contract address, transfer amount, recipient address and version number. This shows how on-chain events can be tracked and handled in off-chain applications.
 
