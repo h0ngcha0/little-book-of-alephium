@@ -2667,7 +2667,7 @@ In the `ContractDestroyedEvent` event object, `eventIndex` is set to `-2` (a spe
 
 Alephium's stateful UTXO model combines the advantages of the UTXO and account models. It supports the Ethereum style mutable states for smart contracts, while leveraging the security benefits of the immutable UTXO model for assets, like those found in Bitcoin.
 
-This hybrid approach has several important implications. For simple transactions that only involve asset transfers, they are handled by the UTXO model, which is battle tested for its security in managing assets. For smart contract transactions that involves asset transfers, Alephium's Asset Permission System (APS) is invented to ensure that all movements of assets within smart contracts are explicit, intentional, and secure.
+This hybrid approach has several important implications. For simple transactions that only involve asset transfers, they are handled by the UTXO model, which is battle tested for its security in managing assets. For smart contract transactions that involve asset transfers, Alephium's Asset Permission System (APS) is invented to ensure that all movements of assets within smart contracts are explicit, intentional, and secure.
 
 ### Tokens
 
@@ -2850,9 +2850,9 @@ After executing the `TxScript`, the final transaction will produce the following
                         |              |
                         |              |   1 ALPH (fixed output)
   1 Token A             |              | =========================================>
-======================> |              |   1 ALPH, 1 Token A (NFTListing contract)
+======================> |              |   0.1 ALPH, 1 Token A (NFTListing contract)
   6.1 ALPHs             |  <TxScript>  | =========================================>
-======================> |              |   0.1 ALPH (NFTMarketPlace contract)
+======================> |              |   1 ALPH (NFTMarketPlace contract)
                         |              | =========================================>
                         |              |   4 ALPH - gas (change output)
                         |              | =========================================>
@@ -3168,7 +3168,6 @@ Ralph supports debug statements in smart contracts. Printing debug messages has 
 
 ```rust
 Contract Math() {
-    @using(checkExternalCaller = false)
     pub fn add(x: U256, y: U256) -> U256 {
         emit Debug(`In the add function:`)
         emit Debug(`${x} + ${y} = ${x + y}`)
@@ -3305,7 +3304,7 @@ The `TokenFaucet` contract implements the `IFungibleToken` interface defined in 
 
 The `withdraw` function is a [transact function](#transact-functions) that allows anyone to withdraw up to 2 tokens from the contract. The function is annotated with `assetsInContract = true` as it uses the contract's assets. It is also annotated with `updateFields = true` because it updates the `balance` contract fields. Since anyone can call the function, the `checkExternalCaller` annotation is set to `false`. For a detailed explanation of the `@using` annotation, refer to the [Function Annotations](#function-annotations) section.
 
-The `WithDraw` [transaction script](#transaction-scripts) is defined in the `withdraw.ral` file. The logic is straightforward: it simply calls the `withdraw` function of the `TokenFaucet` contract with the specified amount.
+The `Withdraw` [transaction script](#transaction-scripts) is defined in the `withdraw.ral` file. The logic is straightforward: it simply calls the `withdraw` function of the `TokenFaucet` contract with the specified amount.
 
 ```rust
 // Defines a transaction script.
@@ -3641,7 +3640,7 @@ For more details on the `DynamicArrayForInt` contract and its test cases, refer 
 
 ### Gasless Transactions
 
-In Ralph, we can use the built-in `payGasFee` built-in function to allow a different user or contract to pay either part or all of the gas fees on behalf of the caller. The business logic of who should pay the gas fee is completely programmable.
+In Ralph, we can use the `payGasFee` built-in function to allow a different user or contract to pay either part or all of the gas fees on behalf of the caller. The business logic of who should pay the gas fee is completely programmable.
 
 ```rust
 Contract Gasless() {
