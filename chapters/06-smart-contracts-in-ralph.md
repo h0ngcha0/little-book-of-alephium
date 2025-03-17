@@ -2667,7 +2667,7 @@ In the `ContractDestroyedEvent` event object, `eventIndex` is set to `-2` (a spe
 
 Alephium's stateful UTXO model combines the advantages of the UTXO and account models. It supports the Ethereum style mutable states for smart contracts, while leveraging the security benefits of the immutable UTXO model for assets, like those found in Bitcoin.
 
-This hybrid approach has several important implications. For simple transactions that only involve asset transfers, they are handled by the UTXO model, which is battle tested for its security in managing assets. For smart contract transactions that involves asset transfers, Alephium's Asset Permission System (APS) is invented to ensure that all movements of assets within smart contracts are explicit, intentional, and secure.
+This hybrid approach has several important implications. For simple transactions that only involve asset transfers, they are handled by the UTXO model, which is battle tested for its security in managing assets. For smart contract transactions that involve asset transfers, Alephium's Asset Permission System (APS) is invented to ensure that all movements of assets within smart contracts are explicit, intentional, and secure.
 
 ### Tokens
 
