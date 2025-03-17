@@ -2631,9 +2631,10 @@ In the `ContractCreatedEvent` event object, `eventIndex` is set to `-1` (a speci
 `ContractDestroyedEvent` is emitted when a contract is destroyed:
 
 ```rust
-Contract Foo() {
+Contract Foo(owner: Address) {
   @using(assetsInContract = true)
   pub fn destroy() -> () {
+    checkCaller!(callerAddress!() == owner, 0)
     destroySelf!(callerAddress!())
   }
 }
