@@ -1978,7 +1978,7 @@ Contract Company() {
 
 Standard interfaces play an important role in the Alephium ecosystem by establishing common patterns that enable interoperability between different smart contracts, wallets, block explorers, and other applications. When contracts implement well-known standard interfaces, other contracts and applications can interact with them without needing to know their specific implementation details.
 
-For example, the fungible token standard and non-fungible token standard ensure that any wallet or marketplace can work with any token that implements these standards. A wallet only needs to understand the standard interface to be able to display token logo and balances. Similarly, a NFT marketplace contract can support trading of any NFTs that follows the non-fungible token standard interface.
+For example, the fungible token standard and non-fungible token standard ensure that any wallet or marketplace can work with any token that implements these standards. A wallet only needs to understand the standard interface to be able to display token logo and balances. Similarly, a NFT marketplace contract can support trading of any NFT that follows the non-fungible token standard interface.
 
 These standard interfaces can also improve composability between contracts. For example, a lending protocol can integrate with any oracle that implements the standard oracle interface, without requiring custom code for each oracle implementation.
 
