@@ -1878,7 +1878,7 @@ Abstract Contract Employee(name: ByteVec, id: U256) {
         return name
     }
     pub fn getId() -> U256 {
-        return ID
+        return id
     }
 }
 
