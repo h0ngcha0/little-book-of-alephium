@@ -2850,9 +2850,9 @@ After executing the `TxScript`, the final transaction will produce the following
                         |              |
                         |              |   1 ALPH (fixed output)
   1 Token A             |              | =========================================>
-======================> |              |   1 ALPH, 1 Token A (NFTListing contract)
+======================> |              |   0.1 ALPH, 1 Token A (NFTListing contract)
   6.1 ALPHs             |  <TxScript>  | =========================================>
-======================> |              |   0.1 ALPH (NFTMarketPlace contract)
+======================> |              |   1 ALPH (NFTMarketPlace contract)
                         |              | =========================================>
                         |              |   4 ALPH - gas (change output)
                         |              | =========================================>
