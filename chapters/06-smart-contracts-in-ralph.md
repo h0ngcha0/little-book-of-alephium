@@ -1367,7 +1367,6 @@ Contract OldCode(owner: Address, n: U256) {
         migrate!(newCode)
     }
 
-    // Please check owner in production code
     @using(updateFields = true)
     pub fn migrateWithFields(newCode: ByteVec, newN: U256) -> () {
         checkCaller!(callerAddress!() == owner, 0)
