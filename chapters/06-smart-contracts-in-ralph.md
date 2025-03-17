@@ -3304,7 +3304,7 @@ The `TokenFaucet` contract implements the `IFungibleToken` interface defined in 
 
 The `withdraw` function is a [transact function](#transact-functions) that allows anyone to withdraw up to 2 tokens from the contract. The function is annotated with `assetsInContract = true` as it uses the contract's assets. It is also annotated with `updateFields = true` because it updates the `balance` contract fields. Since anyone can call the function, the `checkExternalCaller` annotation is set to `false`. For a detailed explanation of the `@using` annotation, refer to the [Function Annotations](#function-annotations) section.
 
-The `WithDraw` [transaction script](#transaction-scripts) is defined in the `withdraw.ral` file. The logic is straightforward: it simply calls the `withdraw` function of the `TokenFaucet` contract with the specified amount.
+The `Withdraw` [transaction script](#transaction-scripts) is defined in the `withdraw.ral` file. The logic is straightforward: it simply calls the `withdraw` function of the `TokenFaucet` contract with the specified amount.
 
 ```rust
 // Defines a transaction script.
