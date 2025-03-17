@@ -62,7 +62,7 @@ Ralph is the smart contract programming language specifically designed for the A
 - Ensure there is one, and preferably only one, obvious way to accomplish tasks
 - Incorporate good practices, especially security practices, as built-in features rather than optional patterns
 
-This design philosophy is reflected in Ralph's key features. The language makes variables immutable by default to reduce mutation-related bugs and unintended state changes. It implements automatic safety checks for public contract calls, protecting against unexpected external interactions that could compromise security. Asset movements between functions must be explicitly approved and verified, eliminating unauthorized transfers. Ralph's specialized data structures like sub-contracts and maps are optimized to minimize state bloat, improving the sustainability of the blockchain. These carefully designed features create a language that balances robust security with developer productivity, making Ralph both powerful and approachable for developers of all experience levels.
+This design philosophy is reflected in Ralph's key features. The language makes variables immutable by default to reduce mutation-related bugs and unintended state changes. It implements automatic safety checks for public contract calls, protecting against unexpected external interactions that could compromise security. Asset movements between functions must be explicitly approved and verified, eliminating unauthorized transfers. Ralph's specialized data structures like sub contracts and maps are optimized to minimize state bloat, improving the sustainability of the blockchain. These carefully designed features create a language that balances robust security with developer productivity, making Ralph both powerful and approachable for developers of all experience levels.
 
 ### Hello Web3
 
@@ -1210,7 +1210,7 @@ Both `assert!` and `panic!` abort transactions immediately. `assert!` verifies a
 
 #### Built-in Functions
 
-Ralph includes a set of built-in functions that enable developers to leverage VM-specific features, and build secure and efficient smart contracts. These functions are organized into the following categories: `Contract Functions`, `Sub-contract Functions`, `Asset Functions`, `Chain Functions`, `Utils Functions`, and `Cryptography Functions`. In Ralph, built-in functions are easily identifiable by their naming convention: they always end with an exclamation mark (`!`).
+Ralph includes a set of built-in functions that enable developers to leverage VM-specific features, and build secure and efficient smart contracts. These functions are organized into the following categories: `Contract Functions`, `Sub Contract Functions`, `Asset Functions`, `Chain Functions`, `Utils Functions`, and `Cryptography Functions`. In Ralph, built-in functions are easily identifiable by their naming convention: they always end with an exclamation mark (`!`).
 
 This section will not attempt to cover the [complete list](https://docs.alephium.org/ralph/built-in-functions) of built-in functions. Instead, we will focus on explaining the most commonly used built-in functions using examples.
 
@@ -1370,9 +1370,12 @@ Contract OldCode(owner: Address, n: U256) {
 
     // Please check owner in production code
     @using(updateFields = true)
-    pub fn migrateWithFields(newCode: ByteVec, newN: U256) -> () {
+    pub fn migrateWithFields(
+        newCode: ByteVec,
+        immFields: ByteVec,
+        mutFields: ByteVec
+    ) -> () {
         checkCaller!(callerAddress!() == owner, 0)
-        let (immFields, mutFields) = NewCode.encodeFields!(owner, newN)
         migrateWithFields!(newCode, immFields, mutFields)
     }
 }
@@ -1400,6 +1403,7 @@ Contract NewCode(owner: Address, mut n: U256) {
 `migrate!()` function can be used if the new contract has exactly the same mutable and immutable fields as the old contract. Otherwise, `migrateWithFields!()` should be used to migrate the contract fields as well. Let's test this out in the TypeScript code below:
 
 ```typescript
+import { binToHex } from '@alephium/web3'
 import { getSigner } from '@alephium/web3-test'
 import { OldCode, NewCode } from '../artifacts/ts'
 
@@ -1409,33 +1413,39 @@ async function test() {
      initialFields: { owner: signer.address, n: 100n }
   })
 
+  const {encodedImmFields, encodedMutFields} = NewCode.encodeFields({
+    owner: signer.address, n: 200n
+  })
+  const immFields = binToHex(encodedImmFields)
+  const mutFields = binToHex(encodedMutFields)
   await oldCode.transact.migrateWithFields({
     signer,
-    args: { newCode: NewCode.contract.bytecode, newN: 200n }
+    args: { newCode: NewCode.contract.bytecode, immFields, mutFields }
   })
 
   const newContract = await NewCode.at(oldCode.address)
   const {returns: newN} = await newContract.view.get()
   console.assert(newN === 200n)
+
   await newContract.transact.set({signer, args: {m: 300n}})
   const {returns: newN2} = await newContract.view.get()
   console.assert(newN2 === 300n)
 
-  await newContract.transact.destroy({ signer })
+  await newContract.transact.destroy({signer})
 }
 
 test()
 ```
 
-The contract using `OldCode` is successfully migrated to the `NewCode` with the `newN` value after `migrateWithFields` function is called. We can continue to use the address of the old contract to interact with the new contract. New contract can also destroy itself and return the contract's deposit back to the owner using the `destroySelf!()` built-in function.
+The contract using `OldCode` is successfully migrated to the `NewCode` with the a new value for `n` after `migrateWithFields` function is called. `n` is also updated from an immutable field to a mutable field. We can continue to use the address of the old contract to interact with the new contract. New contract can also destroy itself and return the contract's deposit back to the owner using the `destroySelf!()` built-in function.
 
-###### Sub-contract Functions
+###### Sub Contract Functions
 
-Alephium supports a unique and powerful feature called sub-contracts. This feature enables developers to construct tree-like structures across a group of related contracts that can be traversed similar to navigating through domain names. Compared to regular maps or tree data structures, sub-contracts offer more expressivity. Each node in the tree is a fully functional contract that can issue tokens, execute complex business logic, provide fine-grained access control to its internal state, and offer sophisticated permission management for its assets.
+Alephium supports a unique and powerful feature called sub contracts. This feature enables developers to construct tree-like structures across a group of related contracts that can be traversed similar to navigating through domain names. Compared to regular maps or tree data structures, sub contracts offer more expressivity. Each node in the tree is a fully functional contract that can issue tokens, execute complex business logic, provide fine-grained access control to its internal state, and offer sophisticated permission management for its assets.
 
-Sub-contracts system also contributes to the long-term health of the Alephium blockchain by incentivizing users to recycle them when not needed. It also keeps things simple and elegant at the VM level since everything is a contract. Maps in Alephium is implemented on top of the sub-contracts system.
+Sub contracts system also contributes to the long-term health of the Alephium blockchain by incentivizing users to recycle them when not needed. It also keeps things simple and elegant at the VM level since everything is a contract. Maps in Alephium is implemented on top of the sub contracts system.
 
-Alephium supports a set of built-in functions to create sub-contracts and calculate sub-contract id. Since sub-contracts are also contracts, all other contract built-in functions can be used on them as well.
+Alephium supports a set of built-in functions to create sub contracts and calculate sub contract id. Since sub contracts are also contracts, all other contract built-in functions can be used on them as well.
 
 ```rust
 Contract Domain(url: ByteVec, subDomainTemplateId: ByteVec) {
@@ -1443,20 +1453,15 @@ Contract Domain(url: ByteVec, subDomainTemplateId: ByteVec) {
     pub fn createSubDomain(
         subDomainUrl: ByteVec
     ) -> Address {
-        let fullUrl = getFullUrl(subDomainUrl)
-        let (immFields, mutFields) = SubDomain.encodeFields!(fullUrl)
+        let (immFields, mutFields) = SubDomain.encodeFields!(url ++ b`/` ++ subDomainUrl)
         let subDomainId = copyCreateSubContract!{callerAddress!() -> ALPH: minimalContractDeposit!()}(
-            fullUrl, subDomainTemplateId, immFields, mutFields
+            subDomainUrl, subDomainTemplateId, immFields, mutFields
         )
         return contractIdToAddress!(subDomainId)
     }
 
     pub fn getSubDomain(subDomainUrl: ByteVec) -> Address {
-        return contractIdToAddress!(subContractId!(getFullUrl(subDomainUrl)))
-    }
-
-    pub fn getFullUrl(subDomainUrl: ByteVec) -> ByteVec {
-        return url ++ b`/` ++ subDomainUrl
+        return contractIdToAddress!(subContractId!(subDomainUrl))
     }
 }
 
@@ -1467,14 +1472,14 @@ Contract SubDomain(url: ByteVec) {
 }
 ```
 
-In the example above, `Domain` is a contract initialized with a `SubDomain` template ID. The `createSubDomain` method creates a new `SubDomain` sub-contract using the `copyCreateSubContract!` built-in function, with `url` as the sub-contract path. Sub-contracts can also be created with `createSubContract!` and `copyCreateSubContractWithToken!` functions, similar to the `createContract!` and `copyCreateContractWithToken!` built-in functions for regular contracts.
+In the example above, `Domain` is a contract initialized with a `SubDomain` template ID. The `createSubDomain` method creates a new `SubDomain` sub contract using the `copyCreateSubContract!` built-in function, with `subDomainUrl` as the sub contract path. Sub contracts can also be created with `createSubContract!` and `copyCreateSubContractWithToken!` functions, similar to the `createContract!` and `copyCreateContractWithToken!` built-in functions for regular contracts.
 
-From the parent contract, the `subContractId!` built-in function allows us to deterministically compute a sub-contract's ID from its sub-contract path. In our example, the `getSubDomain` method uses this function to retrieve the address of a `SubDomain` contract by its URL.
+From the parent contract, the `subContractId!` built-in function allows us to deterministically compute a sub contract's ID from its sub contract path. In our example, the `getSubDomain` method uses this function to retrieve the address of a `SubDomain` contract by its URL.
 
 ```typescript
 import {
-  addressFromContractId, stringToHex, subContractId,
-  MINIMAL_CONTRACT_DEPOSIT
+   addressFromContractId, stringToHex, subContractId,
+   MINIMAL_CONTRACT_DEPOSIT
 } from '@alephium/web3'
 import { getSigner } from '@alephium/web3-test'
 import { Domain, SubDomain } from '../artifacts/ts'
@@ -1504,14 +1509,14 @@ async function test() {
   const subDomainInstance = SubDomain.at(subDomainContractAddress)
   console.assert((await subDomainInstance.view.getUrl()).returns === stringToHex('x.com/home'))
 
-  const subDomainContractId = subContractId(domain.contractId, stringToHex('x.com/home'), 0)
+  const subDomainContractId = subContractId(domain.contractId, stringToHex('home'), 0)
   console.assert(subDomainContractAddress === addressFromContractId(subDomainContractId))
 }
 
 test()
 ```
 
-In the test code above, we first deploy a `SubDomain` template contract. Then, we deploy the `Domain` contract with the URL `x.com` and the ID of the `SubDomain` template contract. Next, we call the `createSubDomain` method to create a `SubDomain` sub-contract with the URL `home`. The code then retrieves the address of the newly created `SubDomain` sub-contract using the `getSubDomain` method and verifies that its URL is correctly set to `x.com/home`. Finally, it demonstrates how to compute the sub-contract's ID directly using the `subContractId` function in the Web3 SDK and confirms that this matches the address returned by the contract method.
+In the test code above, we first deploy a `SubDomain` template contract. Then, we deploy the `Domain` contract with the URL `x.com` and the ID of the `SubDomain` template contract. Next, we call the `createSubDomain` method to create a `SubDomain` sub contract with the URL `home`. The code then retrieves the address of the newly created `SubDomain` sub contract using the `getSubDomain` method and verifies that its URL is correctly set to `x.com/home`. Finally, it demonstrates how to compute the sub contract's ID directly using the `subContractId` function in the Web3 SDK and confirms that this matches the address returned by the contract method.
 
 ###### Asset Functions
 
@@ -1821,11 +1826,11 @@ There are several built-in functions that can be used to create contracts in Ral
 
 #### Sub Contracts
 
-Sub contracts on Alephium provide a simple yet powerful mechanism for organizing related contracts. They enable developers to construct tree-like structures of contracts that can be traversed similar to navigating through domain names. Each sub-contract is a fully functional contract that can maintain its own state, issue tokens, and implement complex business logic, which makes it more powerful than traditional tree or map data structures.
+As we explored in the [Sub Contract Functions](#sub-contract-functions) section, sub contracts on Alephium provide a simple yet powerful mechanism for organizing related contracts. They enable developers to construct tree-like structures of contracts that can be traversed similar to navigating through domain names. Each sub contract is a fully functional contract that can maintain its own state, issue tokens, and implement complex business logic, which makes it more powerful than traditional tree or map data structures.
 
-Like regular contracts, sub-contracts require a deposit that gets returned when destroyed. This incentivizes recycling unused sub-contracts to prevent state bloat. Alephium's maps leverage this same sub-contract system and inherit these properties.
+Like regular contracts, sub contracts require a deposit that gets returned when destroyed. This incentivizes recycling unused sub contracts to prevent state bloat. Alephium's maps leverage this same sub contract system and inherit these properties.
 
-The key to understand the sub-contracts system lies in how contract ids are constructed. For regular contracts, the contract id is derived by combining the transaction id that created the contract, the index of the contract creation output within that transaction, and the contract's group number using the following formula:
+The key to understand the sub contracts system lies in how contract ids are constructed. For regular contracts, the contract id is derived by combining the transaction id that created the contract, the index of the contract creation output within that transaction, and the contract's group number using the following formula:
 
 ```
 contractId = dropRight(blake2b(txId || output index), 1) || group number
@@ -1833,19 +1838,19 @@ contractId = dropRight(blake2b(txId || output index), 1) || group number
 
 The transaction id and the output index are concatenated and hashed using the `Blake2b` hash function. The last byte of the hash is then replaced with the group number to get the final contract id.
 
-For sub-contracts, the contract id is derived by the parent contract's id and a unique `ByteVec` path value that identifies the sub-contract under its parent. This ensures that each sub-contract has a globally unique identifier as well.
+For sub contracts, the contract id is derived by the parent contract's id and a unique `ByteVec` path value that identifies the sub contract under its parent. This ensures that each sub contract has a globally unique identifier as well.
 
 ```
 subContractId = dropRight(blake2b(blake2b(parentContractId || subContractPath)), 1) || group number
 ```
 
-The parent contract's id and the sub-contract's path value are concatenated and double hashed using the `Blake2b` hash function. The last byte of the hash is also replaced with the group number to get the final sub contract id. This embedded group number for both regular and sub-contracts makes it possible for the `groupOfAddress` function in Ralph and Web3 SDK to determine a contract's group number from its address.
+The parent contract's id and the sub contract's path value are concatenated and double hashed using the `Blake2b` hash function. The last byte of the hash is also replaced with the group number to get the final sub contract id. This embedded group number for both regular and sub contracts makes it possible for the `groupOfAddress` function in Ralph and Web3 SDK to determine a contract's group number from its address.
 
-The way that the sub-contract id is constructed allows easy navigation from parent to child contracts. Both Ralph and the Web3 SDK provide functions like `subContractId` and `subContractIdOf` to derive sub-contract ids from parent contract ids and path values.
+The way that the sub contract id is constructed allows easy navigation from parent to child contracts. Both Ralph and the Web3 SDK provide functions like `subContractId` and `subContractIdOf` to derive sub contract ids from parent contract ids and path values.
 
-Sub-contracts provide a powerful abstraction for building complex smart contract systems. For example, an NFT collection can be implemented as a parent contract with individual NFTs as sub-contracts using the NFT's index as the path value. This design enables easy navigation between collection and specific NFTs, and allows each NFT to manage its state and asset independently. Similarly, a DEX can organize token pools as sub-contracts with token ids from the token pair as path values, this approach allows each pool to maintain its own state and assets while remaining discoverable through the main DEX contract. Well-designed smart contracts using sub-contracts create modular, maintainable systems with clear responsibilities.
+Sub contracts provide a powerful abstraction for building complex smart contract systems. For example, an NFT collection can be implemented as a parent contract with individual NFTs as sub contracts using the NFT's index as the path value. This design enables easy navigation between collection and specific NFTs, and allows each NFT to manage its state and asset independently. Similarly, a DEX can organize token pools as sub contracts with token ids from the token pair as path values, this approach allows each pool to maintain its own state and assets while remaining discoverable through the main DEX contract. Well-designed smart contracts using sub contracts create modular, maintainable systems with clear responsibilities.
 
-Please refer to the built-in [Sub-contracts Functions](#sub-contract-functions) section for a concrete example of how to create and interact with sub-contracts.
+Please refer to the built-in [Sub-contracts Functions](#sub-contract-functions) section for a concrete example of how to create and interact with sub contracts.
 
 #### Contract Inheritance
 
@@ -2008,7 +2013,7 @@ Contract ShinyToken() implements IFungibleToken {
   }
 
   pub fn getDecimals() -> U256 {
-      return 18
+      return 0
   }
 }
 ```
@@ -2059,7 +2064,7 @@ In the example above, we deployed the `ShinyToken` contract and issued `10000` t
 
 Non-Fungible Tokens (NFTs) are unique digital assets that represent ownership of a specific piece of content. Unlike fungible tokens which are identical and interchangeable, each NFT has distinct properties that make it one-of-a-kind.
 
-In Alephium, NFT contracts are typically modeled as sub-contracts of NFT collection contracts. Alephium provides standard interfaces for both NFT and NFT collection contracts, making them easily discoverable and interoperable across wallets, marketplaces, and various decentralized applications.
+In Alephium, NFT contracts are typically modeled as sub contracts of NFT collection contracts. Alephium provides standard interfaces for both NFT and NFT collection contracts, making them easily discoverable and interoperable across wallets, marketplaces, and various decentralized applications.
 
 For NFT collections, the standard interface is `INFTCollection` with `@std` id `0002` associated with it. The `INFTCollection` interface defines the standard methods that all NFT collection contracts should implement:
 
@@ -2257,7 +2262,7 @@ Contract AwesomeNFT(
 }
 ```
 
-The `AwesomeNFTCollection` contract implements the standard NFT collection interface. It stores collection metadata through a URI and tracks the total supply of NFTs in the collection. The contract uses a template contract id for `AwesomeNFT` to mint individual NFTs as sub-contracts, with each NFT having its index as sub-contract path. The sub-contract system maintains the relationship between the collection and its NFTs, allowing `AwesomeNFTCollection` contract to properly validate and retrieve NFTs within the collection using the `validateNFT` and `nftByIndex` functions.
+The `AwesomeNFTCollection` contract implements the standard NFT collection interface. It stores collection metadata through a URI and tracks the total supply of NFTs in the collection. The contract uses a template contract id for `AwesomeNFT` to mint individual NFTs as sub contracts, with each NFT having its index as sub contract path. The sub contract system maintains the relationship between the collection and its NFTs, allowing `AwesomeNFTCollection` contract to properly validate and retrieve NFTs within the collection using the `validateNFT` and `nftByIndex` functions.
 
 The `AwesomeNFT` contract implements the standard NFT interface. It stores NFT metadata through a URI and returns the collection id and the index of the NFT in the collection.
 
@@ -2305,7 +2310,7 @@ async function test() {
     attoAlphAmount: MINIMAL_CONTRACT_DEPOSIT + DUST_AMOUNT
   })
 
-  // NFT collection create NFT as a sub-contract, using index as the sub-contract path
+  // NFT collection create NFT as a sub contract, using index as the sub contract path
   // For the first NFT, the index is `0`
   const nftSubContractPath = binToHex(codec.u256Codec.encode(0n))
   const nftContractId = subContractId(nftCollection.contractId, nftSubContractPath, 0)
@@ -2795,7 +2800,7 @@ There are two places where assets are transferred in the `listNFT` function. Fir
 transferTokenToSelf!(tokenOwner, ALPH, listingFee)
 ```
 
-Second, it creates a NFT listing sub-contract by calling the `copyCreateSubContract!` built-in function:
+Second, it creates a NFT listing sub contract by calling the `copyCreateSubContract!` built-in function:
 
 ```rust
 let nftListingContractId = copyCreateSubContract!{
@@ -3042,7 +3047,7 @@ expect(result.contracts[0].fields.withdrawAmount).toEqual(ONE_ALPH)
 expect(result.contracts[0].fields.alphRemaining).toEqual(ONE_ALPH * 99n)
 ```
 
-Note that we use the `initialMaps` field to set up an empty value for the `alreadyWithdrawn` map. We also get an extra `ContractCreated` event because each map entry is created as a sub-contract under the hood.
+Note that we use the `initialMaps` field to set up an empty value for the `alreadyWithdrawn` map. We also get an extra `ContractCreated` event because each map entry is created as a sub contract under the hood.
 
 We can also use the `expectAssertionError` method to verify that the `withdraw` function fails when the caller has already withdrawn:
 
