@@ -1649,7 +1649,7 @@ The `UtilsFunctions` contract demonstrates several utility functions available i
 
 ###### Chain Functions
 
-Ralph provides a set of built-in functions that allow the contract to get the chain and transaction information, such as the current block timestamp, block target, transaction ID, transactin inputs, gas info, and more.
+Ralph provides a set of built-in functions that allow the contract to get the chain and transaction information, such as the current block timestamp, block target, transaction ID, transaction inputs, gas info, and more.
 
 ```rust
 TxScript Chain {
@@ -1666,7 +1666,7 @@ TxScript Chain {
 }
 ```
 
-As we can see in the example above, the `Chain` transaction script uses the built-in functions to emit the current block timestamp, block target, transaction ID, transactin inputs, gas fee and amount, and more.
+As we can see in the example above, the `Chain` transaction script uses the built-in functions to emit the current block timestamp, block target, transaction ID, transaction inputs, gas fee and amount, and more.
 
 `dustAmount!()` returns the minimal amount of ALPH required per UTXO (currently 0.001 ALPH). This prevents the creation of tiny UTXOs that would increase blockchain storage and processing overhead.
 
