@@ -3168,7 +3168,6 @@ Ralph supports debug statements in smart contracts. Printing debug messages has 
 
 ```rust
 Contract Math() {
-    @using(checkExternalCaller = false)
     pub fn add(x: U256, y: U256) -> U256 {
         emit Debug(`In the add function:`)
         emit Debug(`${x} + ${y} = ${x + y}`)
