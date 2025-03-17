@@ -1560,13 +1560,13 @@ import { AssetFunctions } from '../artifacts/ts'
 import { Address, DUST_AMOUNT, NodeProvider } from '@alephium/web3'
 
 async function test() {
+  const nodeProvider = new NodeProvider('http://127.0.0.1:22973')
   const signer = await getSigner()
-  const nodeProvider = new NodeProvider("http://localhost:22973")
 
   const { contractInstance: asset } = await AssetFunctions.deploy(signer, {
-     initialFields: { owner: signer.address, n: 100n },
-     issueTokenAmount: 100n,
-     issueTokenTo: signer.address
+    initialFields: { owner: signer.address, n: 100n },
+    issueTokenAmount: 100n,
+    issueTokenTo: signer.address
   })
 
   async function getBalance(address: Address) {
@@ -1576,37 +1576,39 @@ async function test() {
   }
 
   await asset.transact.burn({
-     signer,
-     tokens: [{ id: asset.contractId, amount: 1n }]
+    signer,
+    tokens: [{ id: asset.contractId, amount: 1n }]
   })
-  const balance = await getBalance(signer.address)
-  console.assert(balance.tokenBalances?.[0].amount === "99")
+  const signerBalance = await getBalance(signer.address)
+  console.assert(signerBalance.tokenBalances?.[0].amount === '99')
 
   await asset.transact.lock({
-     signer,
-     args: { amount: 1n },
-     attoAlphAmount: DUST_AMOUNT,
-     tokens: [{ id: asset.contractId, amount: 1n }]
+    signer,
+    args: { amount: 1n },
+    attoAlphAmount: DUST_AMOUNT,
+    tokens: [{ id: asset.contractId, amount: 1n }]
   })
-  const balance2 = await getBalance(signer.address)
-  console.assert(balance2.tokenBalances?.[0].amount === "99")
-  console.assert(balance2.lockedTokenBalances?.[0].amount === "1")
+  const signerBalance2 = await getBalance(signer.address)
+  console.assert(signerBalance2.tokenBalances?.[0].amount === '99')
+  console.assert(signerBalance2.lockedTokenBalances?.[0].amount === '1')
 
   await asset.transact.deposit({
     signer,
     args: { amount: 1n },
     tokens: [{ id: asset.contractId, amount: 1n }]
   })
-  const balance3 = await getBalance(signer.address)
-  console.assert(balance3.tokenBalances?.[0].amount === "98")
+  const signerBalance3 = await getBalance(signer.address)
+  console.assert(signerBalance3.tokenBalances?.[0].amount === '98')
+  const contractBalance = (await asset.fetchState()).asset.tokens?.[0]?.amount
+  console.assert(contractBalance === 1n)
 
   await asset.transact.withdraw({
     signer,
     args: { amount: 1n },
     tokens: [{ id: asset.contractId, amount: 1n }]
   })
-  const balance4 = await getBalance(signer.address)
-  console.assert(balance4.tokenBalances?.[0].amount === "99")
+  const signerBalance4 = await getBalance(signer.address)
+  console.assert(signerBalance4.tokenBalances?.[0].amount === '99')
 }
 
 test()
