@@ -1,13 +1,12 @@
 # Smart Contracts Development in Ralph
 
-Smart contract development in Ralph is designed with two key principles in mind: simplicity and security. Ralph is a straightforward yet powerful programming language that makes it easier for developers to write secure smart contracts while avoiding common pitfalls found in other blockchain platforms.
+Smart contract development in Ralph is designed with two key principles in mind: simplicity and security. As a straightforward yet robust programming language, Ralph empowers developers to create secure smart contracts with ease, while avoiding common issues found in other blockchain platforms.
 
-Ralph language's design philosophy emphasizes explicit asset management and clear control flow, helping developers reason about their code more effectively. By making asset flows and state changes more visible and predictable, Ralph reduces the likelihood of subtle bugs that could lead to security vulnerabilities. Ralph also makes common smart contract vulnerabilities like reentrancy attacks impossible by design.
+The design philosophy of the Ralph language focuses on explicit asset management and clear control flow. This approach helps developers better understand and reason about their code. By making asset flows and state changes more visible and predictable, Ralph reduces the chances of subtle bugs that could lead to security issues. Additionally, Ralph is designed to make common smart contract vulnerabilities, such as reentrancy attacks, impossible by design.
 
-The UTXO-based asset management model provides additional security benefits by default. It prevents unlimited authorization of assets by restricting access to only the UTXOs specified within a transaction. It also disables flashloan because assets cannot be borrowed and returned in the same transaction.
+The UTXO-based asset management model offers additional security benefits. It prevents unlimited authorization of assets by restricting access to only the UTXOs included in a transaction. It also disables flashloans because assets cannot be borrowed and returned within the same transaction.
 
-These features work together to create a development environment where security isn't an afterthought but is woven into the fabric of the language itself. As we explore Ralph's features and capabilities in more detail throughout this chapter, you'll see how this focus on simplicity and security translates into practical benefits for smart contract development.
-
+These features create a development environment where security is not an afterthought but an integral part of the language's design. As we delve deeper into Ralph's features and capabilities throughout this chapter, you'll discover how this emphasis on simplicity and security translates into practical benefits for smart contract development.
 
 ## Programming Model
 
@@ -15,34 +14,34 @@ Before delving into the specifics of smart contract development in Ralph, it's i
 
 ### UTXO vs Account models
 
-The UTXO (Unspent Transaction Output) model and Account model represent two fundamentally different paradigms for managing blockchain state and transactions, each with distinct advantages and trade-offs.
+The UTXO (Unspent Transaction Output) model and the Account model represent two fundamentally different paradigms for managing blockchain state and transactions, each offering unique advantages and trade-offs.
 
-The UTXO model, pioneered by Bitcoin, treats transactions like a chain of digital cash transfers. Each transaction consumes previous unspent outputs and creates new ones, similar to how physical cash is exchanged. When you spend money, you use up existing bills (inputs) and may receive change back (outputs). This model offers several compelling benefits. Since UTXOs can be processed independently, the system enables natural parallelization of transaction validation. The model also provides enhanced privacy as users can use different addresses for each transaction. Additionally, it allows for efficient batching of multiple payments into single transactions. Perhaps most importantly, the UTXO model has proven its security through Bitcoin's decade-plus history of securing billions in value.
+The UTXO model, introduced by Bitcoin, treats transactions as a series of digital cash transfers. Each transaction consumes previous unspent outputs and creates new ones, similar to how physical cash is exchanged. When you spend money, you use up existing bills (inputs) and may receive change back (outputs). This model offers several compelling benefits. Since UTXOs can be processed independently, the system enables natural parallelization for transaction validation. The model also enhances privacy as users can use different addresses for each transaction. Additionally, it allows for efficient batching of multiple payments into single transactions. Most importantly, the UTXO model has proven its security through Bitcoin's decade-plus history of securing billions in value.
 
-However, the UTXO model faces important limitations when it comes to smart contract development. The lack of persistent state between transactions complicates the implementation of complex business logic. For instance, tracking aggregated data such as a counter across transactions is challenging, despite being a common scenario in modern smart contracts. Additionally, the UTXO scripting language's expressiveness is often intentionally limited to mitigate potential security issues, prioritizing security over flexibility.
+However, the UTXO model has significant limitations when it comes to smart contract development. The lack of persistent state between transactions makes it difficult to implement complex business logic. For example, tracking aggregated data such as a counter across transactions is challenging, even though it is a common scenario in modern smart contracts. Furthermore, the expressiveness of the UTXO scripting language is often deliberately restricted to enhance security.
 
-The Account model, popularized by Ethereum, maintains a global state of accounts with balances and other data. Each account has an address and associated state that can be modified by transactions. This approach brings several benefits to smart contract development. It simplifies the implementation of complex smart contracts and provides straightforward state management. The programming approach it enables mirrors object-oriented programming, a widely adopted and well-understood paradigm with significant traction among developers.
+The Account model, popularized by Ethereum, maintains a global record of accounts. Each account has its own balance and state that can be modified through transactions. This model simplifies smart contract development by making state globally accessible and providing a programming paradigm similar to object-oriented programming, which is widely adopted and well-understood by developers.
 
-The Account model, however, brings its own set of challenges. The shared global state makes parallel execution inherently difficult, the system is more susceptible to MEV (Miner Extractable Value) exploits and it often falls short in providing robust security measures at the smart contract level. A prime example is the need for token approvals, users must approve token contracts to act on their behalf before spending, which in practice often leads to unlimited authorization. If such a contract is malicious or compromised, it could drain a user's entire token balance unchecked. This approval model adds complexity and potential security risks that are not present in the UTXO model.
+However, the Account model has its own set of challenges. The shared global state makes parallel execution inherently difficult, the system is more vulnerable to MEV exploits, and it often lacks robust built-in security features at the language level. For instance, users must approve token contracts to act on their behalf before spending, which in practice often leads in unlimited authorization. If such a contract is malicious or compromised, it could drain a user's entire token balance unchecked. This approval model introduces complexity and potential security risks that are not present in the UTXO model.
 
-Each model has its trade-offs, which is why Alephium developed stateful UTXO (sUTXO) model which thoughtfully combines the advantages of both approaches while mitigating their respective drawbacks. This hybrid model represents a significant step forward in blockchain architecture, offering developers the best of both worlds.
+Each model has its trade-offs, which is why Alephium developed stateful UTXO (sUTXO) model which thoughtfully combines the advantages of both approaches while mitigating their drawbacks. This hybrid model represents a significant step forward in blockchain architecture, offering developers the best of both worlds.
 
 ### Stateful UTXO
 
-In the sUTXO model, assets are managed using UTXOs, preserving the security and parallelization advantages inherent in the traditional UTXO model. While users can own an arbitrary number of UTXOs to manage their assets flexibly, every smart contract in Alephium is assigned exactly one UTXO to manage its assets. This design seamlessly unifies asset management for both users and contracts, simple and consistent.
+In the sUTXO model, assets are managed using UTXOs, preserving the security and parallelization advantages inherent in the traditional UTXO model. Users can own an arbitrary number of UTXOs to manage their assets, while each smart contract is assigned exactly one UTXO. This design seamlessly unifies asset management for both users and contracts, making it simple and consistent.
 
-Contract states, on the other hand, are managed using account-based model, where each contract maintains its own persistent state that can be modified across transactions. This enables developers to express sophisticated business logic more easily.
+In contrast, contract states are managed using the account-based model. Each contract has its own persistent state that can be modified across transactions. This approach allows developers to implement complex business logic more easily.
 
-Transactions in the sUTXO model support both basic asset transfers and complex smart contract interactions. For basic transfers, they follow the classical UTXO pattern: consuming existing UTXOs as inputs and creating new ones as outputs. For example, when Alice sends 5 ALPHs to Bob, the transaction consumes Alice's UTXOs containing 5+ ALPHs in total and creates two new UTXOs: one with 5 ALPHs for Bob and another with the remaining balance (minus fees) returned to Alice.
+In the sUTXO model, transactions enable both simple asset transfers and smart contract interactions. For simple asset transfers, they follow the traditional UTXO pattern: consuming existing UTXOs as inputs and generating new ones as outputs. The sUTXO model enhances this by enabling transactions to also interact with smart contracts. This means a single transaction can transfer assets between users and contracts while simultaneously executing contract logic and updating contract states.
 
-The sUTXO model extends this by enabling transactions to also interact with smart contracts in powerful ways. A single transaction can transfer assets between users and contracts while executing contract logic and modifying contract states. For instance, when swapping tokens on a DEX, the transaction would:
+For example, when swapping tokens on a decentralized exchange (DEX), the transaction would:
 
 1. Consume the user's UTXO containing the input tokens
 2. Execute the DEX contract's swap logic
 3. Update the contract's internal state (e.g. liquidity pools)
-4. Create new UTXOs containing the output tokens for the user
+4. Create new UTXOs containing the output tokens for the user and the contract
 
-Through this innovative model, Alephium achieves the best of both worlds: the scalability and security benefits inherent to UTXOs, combined with the flexibility and expressiveness typically associated with account-based smart contract platforms.
+Through this innovative model, Alephium combines the best of both worlds: the scalability and security benefits inherent to the UTXOs model, along with the flexibility and expressiveness of the account-based model.
 
 ### Hybrid Programming Model
 
