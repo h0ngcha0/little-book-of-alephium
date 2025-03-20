@@ -71,7 +71,7 @@ Let's kick things off with a simple example before we dive into all the nitty-gr
 // This is a comment
 // This is a simple Hello Web3 program
 
-Contract HelloWeb3 {
+Contract HelloWeb3() {
     pub fn main() -> () {
         emit Debug(`Hello Web3!`)
     }
